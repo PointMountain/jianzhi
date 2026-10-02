@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.data/
+.env*
+artifacts/
+*.log
+.DS_Store
+coverage/
+*.tsbuildinfo
+
+# Local learning spaces and backups must stay off GitHub.
+学习空间/
+study.json
+study.json.*.tmp
+.codex/
+.claude/
+.idea/
