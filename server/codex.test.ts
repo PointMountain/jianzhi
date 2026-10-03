@@ -16,6 +16,7 @@ let input='';process.stdin.setEncoding('utf8');process.stdin.on('data',s=>input+
 process.stdin.on('end',()=>{
  if(input==='slow'){setTimeout(()=>{},10000);return}
  if(input==='model'){console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:process.argv[process.argv.indexOf('--model')+1]}}));return}
+ if(input==='options'){console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:JSON.stringify(process.argv)}}));return}
  if(input==='unsupported'){console.log(JSON.stringify({type:'turn.failed',error:{message:"The model is not supported when using Codex with a ChatGPT account."}}));process.exitCode=1;return}
  const output=Buffer.from(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'中文回答已完成'}})+'\\n');
  const split=output.indexOf(Buffer.from('中'))+1;
@@ -28,6 +29,15 @@ process.stdin.on('end',()=>{
   try {
     assert.equal(await runCodex('normal'), '中文回答已完成');
     assert.equal(await runCodex('model', undefined, 'gpt-5.4'), 'gpt-5.4');
+    const options: string[] = JSON.parse(
+      await runCodex('options', undefined, 'gpt-5.4', { codexEffort: 'high', codexFast: true }),
+    );
+    assert.ok(options.includes('model_reasoning_effort="high"'));
+    assert.ok(options.includes('service_tier="priority"'));
+    const defaults: string[] = JSON.parse(await runCodex('options'));
+    assert.ok(
+      !defaults.some((arg) => arg.startsWith('service_tier=') || arg.startsWith('model_reasoning_effort=')),
+    );
     await assert.rejects(runCodex('normal', undefined, '--bad=model'), /模型设置无效/);
     await assert.rejects(runCodex('unsupported', undefined, 'gpt-5.4'), /账号不支持所选模型（gpt-5.4）/);
     const controller = new AbortController();

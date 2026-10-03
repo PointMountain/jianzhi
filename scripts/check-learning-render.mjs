@@ -20,7 +20,7 @@ async function check({ url, dataDir, space, reportPath }) {
   else await page.goto(url);
   await page.waitForSelector('button[aria-label="暂停计时"]');
   await page.click('button[aria-label="暂停计时"]');
-  await page.waitForFunction(() => document.querySelectorAll('.diagram svg').length >= 2, undefined, {
+  await page.waitForFunction(() => document.querySelectorAll('.diagram-image > svg').length >= 2, undefined, {
     timeout: 15000,
   });
 

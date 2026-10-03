@@ -31,7 +31,12 @@ export function codexStatus(force = false): CodexStatus {
   return { ...value, globalModel: globalModel(), defaultModel: cachedDefaultModel() };
 }
 let busy = false;
-export function runCodex(prompt: string, signal?: AbortSignal, selectedModel = ''): Promise<string> {
+export function runCodex(
+  prompt: string,
+  signal?: AbortSignal,
+  selectedModel = '',
+  options: { codexEffort?: string; codexFast?: boolean } = {},
+): Promise<string> {
   if (busy) return Promise.reject(new Error('Codex 正在处理另一个问题，请等待完成后再试。'));
   const model = selectedModel === '@global' ? globalModel() : selectedModel || cachedDefaultModel();
   if ((selectedModel && !model) || (model && !validModel(model)))
@@ -54,6 +59,10 @@ export function runCodex(prompt: string, signal?: AbortSignal, selectedModel = '
         '--skip-git-repo-check',
         '--ignore-user-config',
         ...(model ? ['--model', model] : []),
+        ...(options.codexEffort
+          ? ['-c', `model_reasoning_effort=${JSON.stringify(options.codexEffort)}`]
+          : []),
+        ...(options.codexFast ? ['-c', 'service_tier="priority"'] : []),
         '--sandbox',
         'read-only',
         '-c',

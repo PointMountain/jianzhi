@@ -29,13 +29,15 @@ import {
   UploadSimple,
 } from '@phosphor-icons/react';
 import type { Bootstrap, Course, Note } from '../shared/types';
-import { courseProgress, dayKey, daysEnding, formatDay, keyFor, request, toLesson } from './lib';
+import { courseProgress, dayKey, daysEnding, formatDay, request, toLesson } from './lib';
 import { NewCourse } from './NewCourse';
 import { Learning } from './Learning';
 import { Markdown } from './Markdown';
 import { Modal } from './Modal';
 import { ModelSettings } from './ModelSettings';
 import { Footprint } from './Footprint';
+import { DeleteNote } from './DeleteNote';
+import { completedLessons, lessonCompletion } from '../shared/completions';
 import { SelectField, Segmented, Disclosure } from './Controls';
 
 const nav = [
@@ -142,7 +144,8 @@ export function App() {
     );
   const { state, today } = data;
   const due = Object.values(state.progress).filter((p) => p.due <= today);
-  const totalLearned = Object.keys(state.progress).length;
+  const completions = completedLessons(state);
+  const totalLearned = completions.length;
   const delayed = Object.values(state.progress).filter((p) => p.independentDates.length >= 2).length;
   const parts = route.split('?')[0].split('/').filter(Boolean);
   const course = state.courses.find((c) => c.id === parts[1]);
@@ -155,7 +158,7 @@ export function App() {
       .reduce((sum, r) => sum + r.seconds, 0) / 60,
   );
   const first = state.courses.find((c) => c.id === state.reviews.at(-1)?.courseId) ?? state.courses[0];
-  const next = first?.lessons.find((l) => !state.progress[keyFor(first.id, l.id)]) ?? first?.lessons[0];
+  const next = first?.lessons.find((l) => !lessonCompletion(state, first.id, l.id)) ?? first?.lessons[0];
   const week = daysEnding(today, 7);
   return (
     <>
@@ -330,7 +333,7 @@ export function App() {
                         <p>{first.goal}</p>
                         <div className="course-progress">
                           <span>
-                            {courseProgress(first, state)} / {first.lessons.length} 个小节已练习
+                            {courseProgress(first, state)} / {first.lessons.length} 个小节已学完
                           </span>
                           <span>
                             {Math.round((courseProgress(first, state) / first.lessons.length) * 100)}%
@@ -418,6 +421,9 @@ export function App() {
                         const count = state.reviews.filter(
                           (r) => dayKey(new Date(r.createdAt)) === day,
                         ).length;
+                        const finished = completions.filter(
+                          (c) => dayKey(new Date(c.createdAt)) === day,
+                        ).length;
                         return (
                           <div key={day}>
                             <span>
@@ -426,10 +432,14 @@ export function App() {
                               })}
                             </span>
                             <div
-                              className={`day-square ${day === today ? 'today' : ''} ${count ? 'studied' : ''}`}
-                              title={`${day}：${count} 次练习`}
+                              className={`day-square ${day === today ? 'today' : ''} ${count || finished ? 'studied' : ''}`}
+                              title={`${day}：${finished} 节学完，${count} 次练习`}
                             >
-                              {count ? <Check size={15} /> : new Date(`${day}T12:00:00+08:00`).getDate()}
+                              {count || finished ? (
+                                <Check size={15} />
+                              ) : (
+                                new Date(`${day}T12:00:00+08:00`).getDate()
+                              )}
                             </div>
                           </div>
                         );
@@ -438,7 +448,7 @@ export function App() {
                     <div className="week-stats">
                       <div>
                         <strong>{totalLearned}</strong>
-                        <span>小节已练习</span>
+                        <span>小节已学完</span>
                       </div>
                       <div>
                         <strong>{state.reviews.length}</strong>
@@ -568,32 +578,32 @@ export function App() {
                       </span>
                       <span>
                         <i className="done" />
-                        已练习
+                        已学完
                       </span>
                     </div>
                   </div>
                   <div className="knowledge-map">
                     {Array.from(new Set(selected.lessons.map((l) => l.chapterIndex))).map((ch, i) => {
                       const lessons = selected.lessons.filter((l) => l.chapterIndex === ch);
-                      const done = lessons.filter((l) => state.progress[keyFor(selected.id, l.id)]).length;
+                      const done = lessons.filter((l) => lessonCompletion(state, selected.id, l.id)).length;
                       const target =
-                        lessons.find((l) => !state.progress[keyFor(selected.id, l.id)]) ?? lessons[0];
+                        lessons.find((l) => !lessonCompletion(state, selected.id, l.id)) ?? lessons[0];
                       return (
                         <button
-                          className={`map-node ${target.id === selected.lessons.find((l) => !state.progress[keyFor(selected.id, l.id)])?.id ? 'current' : ''} ${done === lessons.length ? 'done' : ''}`}
+                          className={`map-node ${target.id === selected.lessons.find((l) => !lessonCompletion(state, selected.id, l.id))?.id ? 'current' : ''} ${done === lessons.length ? 'done' : ''}`}
                           key={ch}
                           onClick={() => navigate(`/learn/${selected.id}/${target.id}`)}
                         >
                           <span className="node-number">{String(ch).padStart(2, '0')}</span>
                           <h3>{lessons[0].chapter}</h3>
                           <p>
-                            {lessons.length} 个小节 · {done} 个已练习
+                            {lessons.length} 个小节 · {done} 个已学完
                           </p>
                           <div className="node-dots">
                             {lessons.slice(0, 18).map((l) => (
                               <i
                                 key={l.id}
-                                className={state.progress[keyFor(selected.id, l.id)] ? 'done' : ''}
+                                className={lessonCompletion(state, selected.id, l.id) ? 'done' : ''}
                               />
                             ))}
                             {lessons.length > 18 && <small>+{lessons.length - 18}</small>}
@@ -869,10 +879,10 @@ function CourseDetail({
                 .map((l) => (
                   <button key={l.id} onClick={() => navigate(`/learn/${course.id}/${l.id}`)}>
                     <span
-                      className={`lesson-dot ${data.state.progress[keyFor(course.id, l.id)] ? 'done' : ''}`}
+                      className={`lesson-dot ${lessonCompletion(data.state, course.id, l.id) ? 'done' : ''}`}
                     />
                     <span>{l.title}</span>
-                    <small>{data.state.progress[keyFor(course.id, l.id)] ? '已练习' : '待探索'}</small>
+                    <small>{lessonCompletion(data.state, course.id, l.id) ? '已学完' : '待探索'}</small>
                     <CaretRight size={16} />
                   </button>
                 ))}
@@ -1025,6 +1035,7 @@ function NoteCard({
               <button className="quiet" onClick={() => setEditing(true)}>
                 编辑
               </button>
+              <DeleteNote note={note} update={update} toast={toast} />
               {note.kind === 'question' && (
                 <button
                   className="quiet"

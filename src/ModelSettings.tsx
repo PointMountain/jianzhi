@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Bootstrap, CodexModel } from '../shared/types';
+import type { Bootstrap, CodexModel, ReasoningEffort } from '../shared/types';
 import { request } from './lib';
 import { SelectField } from './Controls';
 
@@ -7,10 +7,12 @@ export function ModelSettings({
   data,
   update,
   toast,
+  compact = false,
 }: {
   data: Bootstrap;
   update: (data: Bootstrap) => void;
   toast: (message: string) => void;
+  compact?: boolean;
 }) {
   const [models, setModels] = useState<CodexModel[]>([]);
   const [catalog, setCatalog] = useState({
@@ -18,6 +20,8 @@ export function ModelSettings({
     defaultModel: data.codex.defaultModel,
   });
   const [value, setValue] = useState(data.state.preferences.codexModel || '');
+  const [effort, setEffort] = useState<ReasoningEffort | ''>(data.state.preferences.codexEffort || '');
+  const [fast, setFast] = useState(data.state.preferences.codexFast || false);
   const [error, setError] = useState(''),
     [loading, setLoading] = useState(true),
     [saving, setSaving] = useState(false);
@@ -41,8 +45,14 @@ export function ModelSettings({
   }, []);
   const current = data.state.preferences.codexModel || '';
   const display = current === '@global' ? catalog.globalModel : current || catalog.defaultModel;
+  const selectedId = value === '@global' ? catalog.globalModel : value || catalog.defaultModel;
+  const selected = models.find((m) => m.id === selectedId);
+  const changed =
+    value !== current ||
+    effort !== (data.state.preferences.codexEffort || '') ||
+    fast !== (data.state.preferences.codexFast || false);
   return (
-    <section className="panel settings-panel">
+    <section className={compact ? 'model-quick-settings' : 'panel settings-panel'}>
       <div className="section-heading">
         <h2>本机 Codex</h2>
         <span className="badge">{data.codex.authenticated ? '已登录' : '需要登录'}</span>
@@ -66,9 +76,11 @@ export function ModelSettings({
                   ? value
                   : '@custom'
             }
-            onChange={(selected) =>
-              setValue(selected === '@default' ? '' : selected === '@custom' ? '自定义模型' : selected)
-            }
+            onChange={(selected) => {
+              setValue(selected === '@default' ? '' : selected === '@custom' ? '自定义模型' : selected);
+              setEffort('');
+              setFast(false);
+            }}
             disabled={loading || saving}
             options={[
               {
@@ -99,6 +111,34 @@ export function ModelSettings({
             />
           </label>
         )}
+        <label>
+          推理强度 · Effort
+          <SelectField
+            label="推理强度"
+            value={effort || '@default'}
+            disabled={loading || saving || !selected}
+            onChange={(value) => setEffort(value === '@default' ? '' : (value as ReasoningEffort))}
+            options={[
+              {
+                value: '@default',
+                label: `模型默认${selected?.defaultEffort ? ` · ${selected.defaultEffort}` : ''}`,
+              },
+              ...(selected?.reasoningEfforts ?? []).map((value) => ({ value, label: value })),
+            ]}
+          />
+        </label>
+        <label className="fast-option">
+          <input
+            type="checkbox"
+            checked={fast}
+            disabled={loading || saving || !selected?.supportsFast}
+            onChange={(e) => setFast(e.target.checked)}
+          />
+          Fast · 更快响应
+        </label>
+        <p className="small muted">
+          Fast 可能消耗更多额度；可选强度和 Fast 支持来自本机模型目录。切换模型会重置为默认强度并关闭 Fast。
+        </p>
         <p className="small muted">
           这里保存本工具的选择，不修改 Codex 全局配置。选择“跟随全局模型”后，每次请求读取全局模型名称。
           {loading
@@ -112,13 +152,13 @@ export function ModelSettings({
         )}
         <button
           className="outline-button"
-          disabled={loading || saving || value === current || value === '自定义模型'}
+          disabled={loading || saving || !changed || value === '自定义模型'}
           onClick={async () => {
             setSaving(true);
             setError('');
             try {
-              update(await request('/model', { model: value }));
-              toast('模型已更新，将用于下一次请求');
+              update(await request('/model', { model: value, effort, fast }));
+              toast('模型、推理强度和 Fast 已保存，将用于下一次请求');
             } catch (e) {
               setError((e as Error).message);
             } finally {
@@ -126,7 +166,7 @@ export function ModelSettings({
             }
           }}
         >
-          {saving ? '正在保存…' : value === current ? '已保存当前选择' : '保存模型选择'}
+          {saving ? '正在保存…' : !changed ? '已保存当前选择' : '保存请求设置'}
         </button>
       </div>
     </section>

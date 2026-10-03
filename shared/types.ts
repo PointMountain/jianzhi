@@ -19,6 +19,23 @@ export interface Course {
   repository?: { path: string; files: string[]; importedAt: string; commit?: string };
 }
 export type Rating = 'again' | 'hint' | 'good';
+export const reasoningEfforts = [
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+] as const;
+export type ReasoningEffort = (typeof reasoningEfforts)[number];
+export interface LessonCompletion {
+  courseId: string;
+  lessonId: string;
+  createdAt: string;
+  source: 'reading' | 'review';
+}
 export interface Progress {
   lessonId: string;
   courseId: string;
@@ -39,6 +56,7 @@ export interface Review {
   due: string;
   seconds: number;
   revealed: boolean;
+  feedback?: string;
 }
 export interface Note {
   id: string;
@@ -72,7 +90,13 @@ export interface StudyState {
   notes: Note[];
   chats: Record<string, ChatMessage[]>;
   summaries?: SummaryCard[];
-  preferences: { dailyMinutes: number; codexModel?: string };
+  completions?: Record<string, LessonCompletion>;
+  preferences: {
+    dailyMinutes: number;
+    codexModel?: string;
+    codexEffort?: ReasoningEffort | '';
+    codexFast?: boolean;
+  };
 }
 export interface CodexStatus {
   available: boolean;
@@ -87,6 +111,9 @@ export interface CodexModel {
   name: string;
   description: string;
   isDefault: boolean;
+  reasoningEfforts: ReasoningEffort[];
+  defaultEffort?: ReasoningEffort;
+  supportsFast: boolean;
 }
 export interface RepositoryFile {
   path: string;

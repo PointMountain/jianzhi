@@ -1,4 +1,5 @@
 import type { Bootstrap, Course, StudyState } from '../shared/types';
+import { lessonCompletion } from '../shared/completions';
 export async function request<T = Bootstrap>(
   url: string,
   body?: unknown,
@@ -19,11 +20,11 @@ export async function request<T = Bootstrap>(
 }
 export const keyFor = (c: string, l: string) => `${c}:${l}`;
 export const toLesson = (course: Course, state: StudyState) => {
-  const next = course.lessons.find((l) => !state.progress[keyFor(course.id, l.id)]) ?? course.lessons[0];
+  const next = course.lessons.find((l) => !lessonCompletion(state, course.id, l.id)) ?? course.lessons[0];
   return `/learn/${course.id}/${next.id}`;
 };
 export const courseProgress = (c: Course, s: StudyState) =>
-  c.lessons.filter((l) => s.progress[keyFor(c.id, l.id)]).length;
+  c.lessons.filter((l) => lessonCompletion(s, c.id, l.id)).length;
 export const formatDay = (date: string) =>
   new Date(date.length === 10 ? `${date}T12:00:00+08:00` : date).toLocaleDateString('zh-CN', {
     month: 'long',

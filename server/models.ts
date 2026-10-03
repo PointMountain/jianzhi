@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import type { CodexModel } from '../shared/types';
+import { reasoningEfforts, type ReasoningEffort } from '../shared/types';
 import { codexRuntime } from './codex-runtime';
 
 export const validModel = (value: string) => /^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,119}$/.test(value);
@@ -92,6 +93,22 @@ export function listModels(force = false): Promise<CodexModel[]> {
                 name: String(model.displayName || model.model),
                 description: String(model.description || ''),
                 isDefault: model.isDefault === true,
+                reasoningEfforts: (Array.isArray(model.supportedReasoningEfforts)
+                  ? model.supportedReasoningEfforts
+                  : []
+                )
+                  .map((option: { reasoningEffort?: unknown }) => option.reasoningEffort)
+                  .filter((effort: unknown): effort is ReasoningEffort =>
+                    reasoningEfforts.includes(effort as ReasoningEffort),
+                  ),
+                defaultEffort: reasoningEfforts.includes(model.defaultReasoningEffort)
+                  ? model.defaultReasoningEffort
+                  : undefined,
+                supportsFast: Array.isArray(model.serviceTiers)
+                  ? model.serviceTiers.some(
+                      (tier: { id?: string }) => tier.id === 'priority' || tier.id === 'fast',
+                    )
+                  : Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes('fast'),
               });
           if (event.result.nextCursor && models.length < 500)
             send({

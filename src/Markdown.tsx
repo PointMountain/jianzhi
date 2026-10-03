@@ -2,6 +2,7 @@ import { isValidElement, memo, useEffect, useId, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Disclosure } from './Controls';
+import { MediaPreview } from './MediaPreview';
 
 function Diagram({ code }: { code: string }) {
   const id = `diagram-${useId().replace(/[^a-z0-9]/gi, '')}`;
@@ -37,7 +38,7 @@ function Diagram({ code }: { code: string }) {
     </Disclosure>
   ) : (
     <div className="diagram" aria-label="知识关系图">
-      {svg ? <div dangerouslySetInnerHTML={{ __html: svg }} /> : <p className="muted">正在绘制关系图…</p>}
+      {svg ? <MediaPreview svg={svg} alt="知识关系图" /> : <p className="muted">正在绘制关系图…</p>}
     </div>
   );
 }
@@ -55,7 +56,12 @@ const components: Components = {
       {children}
     </a>
   ),
-  img: ({ alt }) => <span className="muted">[图片：{alt || '外部图片'}]</span>,
+  img: ({ src, alt }) =>
+    typeof src === 'string' && (/^https?:\/\//i.test(src) || src.startsWith('/api/book-images/')) ? (
+      <MediaPreview src={src} alt={alt || '配图'} />
+    ) : (
+      <span className="muted">[图片：{alt || '无法读取此图片地址'}]</span>
+    ),
   code: ({ className, children, ...props }) =>
     className === 'language-mermaid' ? (
       <Diagram code={String(children).trim()} />
@@ -71,13 +77,16 @@ const bookComponents: Components = {
     const image = typeof src === 'string' ? src : '';
     if (image.startsWith('images/'))
       return (
-        <img
-          loading="lazy"
+        <MediaPreview
           src={`/api/book-images/${encodeURIComponent(image.slice(7))}`}
           alt={alt || '书中配图'}
         />
       );
-    return <span className="muted">[图片：{alt || '外部图片'}]</span>;
+    return typeof src === 'string' && /^https?:\/\//i.test(src) ? (
+      <MediaPreview src={src} alt={alt || '配图'} />
+    ) : (
+      <span className="muted">[图片：{alt || '无法读取此图片地址'}]</span>
+    );
   },
 };
 

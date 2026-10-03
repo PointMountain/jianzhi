@@ -50,6 +50,17 @@ test('local API saves real records, validates ownership, exports and survives re
     const courseId = created.data.courseId;
     const lessonId = created.data.state.courses[0].lessons[0].id;
     assert.equal(created.data.state.reviews.length, 0);
+    assert.equal((await send('/completions', { courseId, lessonId: 'missing' })).status, 400);
+    const completed = await send('/completions', { courseId, lessonId });
+    assert.equal(completed.status, 200);
+    const completion = completed.data.state.completions[`${courseId}:${lessonId}`];
+    assert.equal(completion.source, 'reading');
+    assert.deepEqual(completed.data.state.progress, {});
+    assert.equal(completed.data.state.reviews.length, 0);
+    assert.deepEqual(
+      (await send('/completions', { courseId, lessonId })).data.state.completions,
+      completed.data.state.completions,
+    );
     const note = await send('/notes', {
       courseId,
       lessonId,
@@ -68,6 +79,15 @@ test('local API saves real records, validates ownership, exports and survives re
       'PATCH',
     );
     assert.equal(updated.data.state.notes[0].resolved, true);
+    const disposable = await send('/notes', {
+      courseId,
+      lessonId,
+      kind: 'note',
+      content: 'Delete only this note',
+    });
+    const deleteId = disposable.data.state.notes[0].id;
+    assert.equal((await send(`/notes/${deleteId}`, {}, 'DELETE')).data.state.notes.length, 1);
+    assert.equal((await send(`/notes/${deleteId}`, {}, 'DELETE')).status, 404);
     const review = await send('/reviews', {
       courseId,
       lessonId,
@@ -75,9 +95,12 @@ test('local API saves real records, validates ownership, exports and survives re
       rating: 'good',
       revealed: true,
       seconds: 120,
+      feedback: '具体反馈：保留完整记录的解释正确。',
     });
     assert.equal(review.status, 201);
     assert.equal(review.data.state.reviews[0].rating, 'hint');
+    assert.equal(review.data.state.reviews[0].feedback, '具体反馈：保留完整记录的解释正确。');
+    assert.deepEqual(review.data.state.completions[`${courseId}:${lessonId}`], completion);
     assert.deepEqual(
       Object.values(review.data.state.progress).map((p: any) => p.independentDates),
       [[]],
@@ -86,10 +109,16 @@ test('local API saves real records, validates ownership, exports and survives re
     assert.equal((await send('/preferences', { dailyMinutes: 999 })).status, 400);
     assert.equal((await send('/preferences', { dailyMinutes: 30 })).status, 200);
     assert.equal((await send('/model', { model: '--bad argument' })).status, 400);
+    assert.equal((await send('/model', { model: '', effort: 'invented' })).status, 400);
+    assert.equal((await send('/model', { model: '', fast: 'yes' })).status, 400);
     assert.equal((await send('/model', { model: 'gpt-5.5' })).data.state.preferences.codexModel, 'gpt-5.5');
     assert.equal((await send('/summaries', { courseId, lessonId })).status, 400);
     const tutor = await send('/tutor', { courseId, lessonId, message: 'Explain persistence' });
     assert.equal(tutor.status, 400);
+    assert.equal(
+      (await send('/recall-feedback', { courseId, lessonId, answer: 'My explanation' })).status,
+      400,
+    );
     const exported = await (await fetch(url + '/export')).json();
     assert.equal(exported.notes.length, 1);
     assert.deepEqual(exported.chats, {}); // Failed requests must not become fake conversation evidence.
@@ -118,6 +147,9 @@ test('local API saves real records, validates ownership, exports and survives re
     const mirror = fs.readFileSync(path.join(dir, 'exports/learning-notes.md'), 'utf8');
     assert.match(mirror, /Atomic replacement preserves a complete record/);
     assert.match(mirror, /The server writes the file atomically/);
+    assert.match(mirror, /已学完的小节/);
+    assert.match(mirror, /具体反馈：保留完整记录的解释正确/);
+    assert.doesNotMatch(mirror, /Delete only this note/);
     assert.doesNotMatch(mirror, /\.data\/study.json/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve())));

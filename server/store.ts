@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { StudyState } from '../shared/types';
 import { prepareWorkspace, resolveWorkspace } from './workspace';
+import { completedLessons } from '../shared/completions';
 
 export const dataDir = resolveWorkspace();
 const stateFile = path.join(dataDir, 'study.json');
@@ -47,6 +48,15 @@ export function markdownExport(value = state): string {
       '',
     );
   }
+  lines.push('## 已学完的小节', '');
+  for (const completion of completedLessons(value)) {
+    const course = value.courses.find((c) => c.id === completion.courseId);
+    const lesson = course?.lessons.find((l) => l.id === completion.lessonId);
+    lines.push(
+      `- ${course?.title} / ${lesson?.title} · ${completion.createdAt} · ${completion.source === 'review' ? '完成回忆练习' : '标记学完'}`,
+      '',
+    );
+  }
   lines.push('## 笔记与疑问', '');
   for (const n of value.notes)
     lines.push(
@@ -70,6 +80,7 @@ export function markdownExport(value = state): string {
       '',
       `自评：${{ again: '尚未记住', hint: '需要提示', good: '能独立解释' }[r.rating]}；已查看材料：${r.revealed ? '是' : '否'}；下次复习：${r.due}`,
       '',
+      ...(r.feedback ? ['核对反馈（Codex 生成，供参考）：', '', r.feedback, ''] : []),
     );
   }
   lines.push('## 学习总结图卡', '');

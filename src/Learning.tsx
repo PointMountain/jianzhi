@@ -15,6 +15,8 @@ import {
   Sparkle,
   TreeStructure,
   X,
+  SidebarSimple,
+  GearSix,
 } from '@phosphor-icons/react';
 import type { Bootstrap, Course, Lesson, Rating } from '../shared/types';
 import { keyFor, request } from './lib';
@@ -22,6 +24,9 @@ import { Markdown } from './Markdown';
 import { SelectionTools } from './SelectionTools';
 import { Segmented, Disclosure } from './Controls';
 import { Modal } from './Modal';
+import { ModelSettings } from './ModelSettings';
+import { DeleteNote } from './DeleteNote';
+import { lessonCompletion } from '../shared/completions';
 
 export function Learning({
   data,
@@ -42,6 +47,17 @@ export function Learning({
     location.hash.endsWith('?recall') ? 'recall' : 'read',
   );
   const [sideTab, setSideTab] = useState<'chat' | 'note'>('chat');
+  const [leftCollapsed, setLeftCollapsed] = useState(
+    () => localStorage.getItem('jianzhi:outline-collapsed') === 'true',
+  );
+  const [rightCollapsed, setRightCollapsed] = useState(
+    () => localStorage.getItem('jianzhi:tutor-collapsed') === 'true',
+  );
+  const [modelSettings, setModelSettings] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [feedbackError, setFeedbackError] = useState('');
+  const feedbackAbort = useRef<AbortController | null>(null);
   const [answer, setAnswer] = useState(() => localStorage.getItem(`draft:${course.id}:${lesson.id}`) || '');
   const [message, setMessage] = useState(''),
     [quote, setQuote] = useState(''),
@@ -51,7 +67,9 @@ export function Learning({
     [saving, setSaving] = useState(false),
     [error, setError] = useState('');
   const [feedback, setFeedback] = useState(false),
-    [assisted, setAssisted] = useState(false),
+    [assisted, setAssisted] = useState(
+      () => localStorage.getItem(`draft-assisted:${course.id}:${lesson.id}`) === 'true',
+    ),
     [submitted, setSubmitted] = useState(false);
   const [seconds, setSeconds] = useState(0),
     [paused, setPaused] = useState(false),
@@ -62,16 +80,35 @@ export function Learning({
   const key = keyFor(course.id, lesson.id);
   const messages = data.state.chats[key] ?? [];
   const progress = data.state.progress[key];
+  const completion = lessonCompletion(data.state, course.id, lesson.id);
   useEffect(() => {
-    localStorage.setItem(`draft:${course.id}:${lesson.id}`, answer);
-  }, [answer, course.id, lesson.id]);
+    localStorage.setItem('jianzhi:outline-collapsed', String(leftCollapsed));
+  }, [leftCollapsed]);
+  useEffect(() => {
+    localStorage.setItem('jianzhi:tutor-collapsed', String(rightCollapsed));
+  }, [rightCollapsed]);
+  useEffect(() => {
+    if (submitted) {
+      localStorage.removeItem(`draft:${course.id}:${lesson.id}`);
+      localStorage.removeItem(`draft-assisted:${course.id}:${lesson.id}`);
+    } else {
+      localStorage.setItem(`draft:${course.id}:${lesson.id}`, answer);
+      localStorage.setItem(`draft-assisted:${course.id}:${lesson.id}`, String(assisted || feedback));
+    }
+  }, [answer, assisted, feedback, submitted, course.id, lesson.id]);
   useEffect(() => {
     const id = setInterval(() => {
       if (!paused && document.visibilityState === 'visible') setSeconds((s) => s + 1);
     }, 1000);
     return () => clearInterval(id);
   }, [paused]);
-  useEffect(() => () => abort.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abort.current?.abort();
+      feedbackAbort.current?.abort();
+    },
+    [],
+  );
   useEffect(() => {
     chatEnd.current?.scrollIntoView({
       block: 'nearest',
@@ -79,11 +116,12 @@ export function Learning({
     });
   }, [messages.length, busy]);
   async function ask(text = message) {
-    if (!text.trim() || busy) return;
+    if (!text.trim() || busy || checking) return;
     if (tab === 'recall' && !feedback) setAssisted(true);
     setBusy(true);
     setError('');
     setSideTab('chat');
+    setRightCollapsed(false);
     abort.current = new AbortController();
     try {
       const result = await request(
@@ -122,7 +160,7 @@ export function Learning({
     }
   }
   async function rate(rating: Rating) {
-    if (!answer.trim()) return;
+    if (!answer.trim() || saving || checking) return;
     setSaving(true);
     setError('');
     try {
@@ -133,12 +171,55 @@ export function Learning({
         rating,
         revealed: assisted,
         seconds,
+        feedback: feedbackText,
       });
       update(result);
       setSubmitted(true);
+      setPaused(true);
       setSeconds(0);
       localStorage.removeItem(`draft:${course.id}:${lesson.id}`);
-      toast('回答已保存，下一次复习已安排');
+      toast('本节已学完，回答已保存，下一次复习已安排');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function checkAnswer() {
+    if (!answer.trim() || checking || busy) return;
+    setFeedback(true);
+    setChecking(true);
+    setFeedbackError('');
+    feedbackAbort.current = new AbortController();
+    try {
+      const result = await request<{ feedback: string }>(
+        '/recall-feedback',
+        {
+          courseId: course.id,
+          lessonId: lesson.id,
+          answer,
+        },
+        'POST',
+        feedbackAbort.current.signal,
+      );
+      setFeedbackText(result.feedback);
+    } catch (e) {
+      setFeedbackError(
+        (e as Error).name === 'AbortError'
+          ? '核对已停止，回答仍保留。可以重试或自行记录回忆结果。'
+          : (e as Error).message,
+      );
+    } finally {
+      setChecking(false);
+    }
+  }
+  async function completeLesson() {
+    if (saving || completion) return;
+    setSaving(true);
+    setError('');
+    try {
+      update(await request('/completions', { courseId: course.id, lessonId: lesson.id }));
+      toast('本节已学完，已记录到足迹');
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -160,7 +241,7 @@ export function Learning({
       <div className="outline-title">
         学习路线{' '}
         <span>
-          {course.lessons.filter((l) => data.state.progress[keyFor(course.id, l.id)]).length}/
+          {course.lessons.filter((l) => lessonCompletion(data.state, course.id, l.id)).length}/
           {course.lessons.length}
         </span>
       </div>
@@ -182,10 +263,13 @@ export function Learning({
                 aria-current={l.id === lesson.id ? 'step' : undefined}
                 className={l.id === lesson.id ? 'active' : ''}
               >
-                <span className={`lesson-dot ${data.state.progress[keyFor(course.id, l.id)] ? 'done' : ''}`}>
-                  {data.state.progress[keyFor(course.id, l.id)] && <Check size={10} />}
+                <span className={`lesson-dot ${lessonCompletion(data.state, course.id, l.id) ? 'done' : ''}`}>
+                  {lessonCompletion(data.state, course.id, l.id) && <Check size={10} />}
                 </span>
                 <span>{l.title}</span>
+                {lessonCompletion(data.state, course.id, l.id) && (
+                  <span className="outline-completed">已学完</span>
+                )}
               </button>
             ))}
         </div>
@@ -200,6 +284,7 @@ export function Learning({
           capture={setQuote}
           choose={(target) => {
             setSideTab(target);
+            setRightCollapsed(false);
             if (target === 'note') setKind('note');
             requestAnimationFrame(() => {
               const input = document.getElementById(target === 'chat' ? 'chat-question' : 'personal-note');
@@ -226,6 +311,13 @@ export function Learning({
           <span>{course.title}</span>
           <strong>{lesson.title}</strong>
         </div>
+        <button
+          className={`quiet completion-toggle ${completion ? 'completed' : ''}`}
+          disabled={saving || !!completion}
+          onClick={() => void completeLesson()}
+        >
+          <Check size={16} /> {completion ? '本节已学完' : '学完本节'}
+        </button>
         <div className="timer">
           <Clock size={16} />
           <span>
@@ -240,6 +332,26 @@ export function Learning({
           </button>
         </div>
         <button
+          className="icon-button desktop-outline-toggle"
+          aria-label={leftCollapsed ? '展开左侧目录' : '收起左侧目录'}
+          title={leftCollapsed ? '展开左侧目录' : '收起左侧目录'}
+          aria-expanded={!leftCollapsed}
+          aria-controls="lesson-outline"
+          onClick={() => setLeftCollapsed(!leftCollapsed)}
+        >
+          <SidebarSimple size={21} />
+        </button>
+        <button
+          className="icon-button tutor-toggle"
+          aria-label={rightCollapsed ? '展开右侧助手' : '收起右侧助手'}
+          title={rightCollapsed ? '展开右侧助手' : '收起右侧助手'}
+          aria-expanded={!rightCollapsed}
+          aria-controls="tutor-panel"
+          onClick={() => setRightCollapsed(!rightCollapsed)}
+        >
+          <ChatCircleText size={21} />
+        </button>
+        <button
           className="icon-button outline-toggle"
           onClick={() => setOutline(!outline)}
           aria-label="打开章节目录"
@@ -248,8 +360,15 @@ export function Learning({
           <List size={22} />
         </button>
       </header>
-      <div className="learning-layout">
-        <aside className="lesson-outline" aria-label="学习路线">
+      {error && (
+        <p className="error learning-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div
+        className={`learning-layout ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}
+      >
+        <aside className="lesson-outline" id="lesson-outline" aria-label="学习路线">
           {outlineContent}
         </aside>
         <Modal title="学习路线" description={course.title} open={outline} onOpenChange={setOutline}>
@@ -296,6 +415,14 @@ export function Learning({
                   开始主动回忆
                 </button>
                 <button
+                  className="outline-button"
+                  disabled={saving || !!completion}
+                  onClick={() => void completeLesson()}
+                >
+                  <Check size={16} /> {completion ? '本节已学完' : '学完本节，记录到足迹'}
+                </button>
+                <span className="small muted">学完记录学习足迹；完成回忆自评后才会安排复习。</span>
+                <button
                   className="quiet"
                   onClick={() =>
                     navigate(
@@ -329,7 +456,11 @@ export function Learning({
               </label>
               {!feedback && !submitted && (
                 <div className="button-row">
-                  <button className="primary" disabled={!answer.trim()} onClick={() => setFeedback(true)}>
+                  <button
+                    className="primary"
+                    disabled={!answer.trim() || busy}
+                    onClick={() => void checkAnswer()}
+                  >
                     提交解释并核对
                   </button>
                   <button
@@ -345,41 +476,85 @@ export function Learning({
               )}
               {feedback && !submitted && (
                 <div className="feedback-box">
-                  <h3>核对后，你能独立解释吗？</h3>
-                  <p className="small muted">如实记录。自评用于安排复习，Codex 点评不会自动判定掌握。</p>
-                  <Disclosure title="查看材料，核对你的解释">
+                  <h3>针对这道题，核对你的回答</h3>
+                  {checking && (
+                    <div className="thinking" role="status">
+                      <CircleNotch className="spin" size={17} />
+                      正在逐点核对…
+                      <button className="quiet" onClick={() => feedbackAbort.current?.abort()}>
+                        停止核对
+                      </button>
+                    </div>
+                  )}
+                  {feedbackError && (
+                    <p className="error" role="alert">
+                      {feedbackError}
+                    </p>
+                  )}
+                  {feedbackText && (
+                    <div className="recall-feedback">
+                      <Markdown>{feedbackText}</Markdown>
+                    </div>
+                  )}
+                  {!checking && !feedbackText && (
+                    <button className="outline-button" disabled={busy} onClick={() => void checkAnswer()}>
+                      重试核对
+                    </button>
+                  )}
+                  {!checking && (
+                    <button
+                      className="quiet"
+                      onClick={() => {
+                        setFeedback(false);
+                        setFeedbackText('');
+                        setFeedbackError('');
+                        setAssisted(true);
+                      }}
+                    >
+                      修改解释（按提示后作答记录）
+                    </button>
+                  )}
+                  <Disclosure title="需要时回看本节原文">
                     <Markdown book={course.id === 'ai-agent-book'}>{lesson.content}</Markdown>
                   </Disclosure>
-                  <button
-                    className="outline-button"
-                    disabled={busy}
-                    onClick={() => {
-                      void ask(
-                        `请点评我的自测答案：\n题目：${lesson.question}\n我的回答：${answer}\n请指出对的部分、缺口和误解，然后给一个变式问题。`,
-                      );
-                    }}
-                  >
-                    请 Codex 点评我的回答
-                  </button>
+                  <h3>回看刚才提交的解释，选择本次结果</h3>
+                  <p className="small muted">
+                    点击后保存回答并安排复习。评价的是核对前的回答；点评仅供参考，不会自动判定掌握。
+                  </p>
+                  {assisted && (
+                    <p className="small muted">回答前已看过材料、提示或旧对话，本次不计为独立回忆。</p>
+                  )}
                   <div className="rating-buttons">
-                    <button disabled={saving} onClick={() => void rate('again')}>
-                      还没记住<small>明天再练</small>
+                    <button disabled={saving || checking} onClick={() => void rate('again')}>
+                      还没记住<small>仍讲不清 · 明天再练</small>
                     </button>
-                    <button disabled={saving} onClick={() => void rate('hint')}>
-                      需要提示<small>明天再练</small>
+                    <button disabled={saving || checking} onClick={() => void rate('hint')}>
+                      提示后能解释<small>借助提示才想起 · 明天再练</small>
                     </button>
-                    <button disabled={saving} onClick={() => void rate('good')}>
-                      {assisted ? '提示后能解释' : '能独立解释'}
-                      <small>{assisted || !progress ? '明天巩固' : '逐步拉长间隔'}</small>
+                    <button disabled={saving || checking || assisted} onClick={() => void rate('good')}>
+                      独立解释
+                      <small>
+                        {assisted
+                          ? '本次已用提示，不能选择'
+                          : !progress
+                            ? '没用提示 · 明天巩固'
+                            : '没用提示 · 按计划延长间隔'}
+                      </small>
                     </button>
                   </div>
+                  <p className="small muted">
+                    独立回忆按 1、3、7、14、30 天安排；到期且跨日完成才推进，当天重复不会拉长间隔。
+                  </p>
                 </div>
               )}
               {submitted && (
                 <div className="success-panel">
                   <Check size={26} />
-                  <h2>这一步，留下了。</h2>
+                  <h2>本节已学完，回忆已记录。</h2>
                   <p>你的回答已保存。下次复习：{progress?.due}。</p>
+                  <button className="quiet" onClick={() => navigate('/activity')}>
+                    查看学习足迹
+                  </button>
                   {next && (
                     <button className="primary" onClick={() => navigate(`/learn/${course.id}/${next.id}`)}>
                       进入下一小节
@@ -393,7 +568,7 @@ export function Learning({
             </section>
           )}
         </main>
-        <aside className="tutor-panel">
+        <aside className="tutor-panel" id="tutor-panel" aria-label="学习助手面板">
           <div className="tutor-heading">
             <div className="tutor-mark">
               <Sparkle size={19} />
@@ -412,6 +587,22 @@ export function Learning({
               title={data.codex.authenticated ? 'Codex 已登录' : 'Codex 未登录'}
             />
           </div>
+          <button
+            className="model-shortcut"
+            onClick={() => setModelSettings(true)}
+            aria-label="快捷设置模型、Effort 和 Fast"
+          >
+            <GearSix size={16} />
+            <span>
+              {data.state.preferences.codexModel === '@global'
+                ? data.codex.globalModel
+                : data.state.preferences.codexModel || data.codex.defaultModel || '选择模型'}
+            </span>
+            <small>
+              {data.state.preferences.codexEffort || '默认强度'} · Fast{' '}
+              {data.state.preferences.codexFast ? '开' : '关'}
+            </small>
+          </button>
           <div className="side-tabs" role="group" aria-label="学习助手">
             <button
               aria-pressed={sideTab === 'chat'}
@@ -522,7 +713,7 @@ export function Learning({
                     <button
                       aria-label="发送问题"
                       className="send-button"
-                      disabled={!message.trim()}
+                      disabled={!message.trim() || checking}
                       onClick={() => void ask()}
                     >
                       <PaperPlaneTilt size={19} />
@@ -570,18 +761,22 @@ export function Learning({
                     <div key={n.id}>
                       <span className="badge">{n.kind === 'question' ? '疑问' : '笔记'}</span>
                       <Markdown>{n.content}</Markdown>
+                      <DeleteNote note={n} update={update} toast={toast} />
                     </div>
                   ))}
               </div>
             </div>
           )}
-          {error && (
-            <p className="error tutor-error" role="alert">
-              {error}
-            </p>
-          )}
         </aside>
       </div>
+      <Modal
+        title="本次学习的请求设置"
+        description="保存后用于下一次讲解、答案核对和总结请求。"
+        open={modelSettings}
+        onOpenChange={setModelSettings}
+      >
+        {modelSettings && <ModelSettings compact data={data} update={update} toast={toast} />}
+      </Modal>
     </div>
   );
 }
