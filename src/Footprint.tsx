@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, CalendarBlank, Repeat, Images, Sparkle } from '@phosphor-icons/react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarBlank,
+  Repeat,
+  Images,
+  Sparkle,
+  ChatCircleText,
+} from '@phosphor-icons/react';
 import type { Bootstrap, Progress } from '../shared/types';
 import { dayKey, formatDay, keyFor, request } from './lib';
 import { Markdown } from './Markdown';
 import { SummaryImage } from './SummaryImage';
 import { SelectField, Segmented, Disclosure } from './Controls';
 import { completedLessons } from '../shared/completions';
+import { guidedEvidence, guidedTranscript } from '../shared/guided';
+import { GuidedRecord } from './GuidedLearning';
 
 function shift(day: string, offset: number) {
   const date = new Date(`${day}T12:00:00+08:00`);
@@ -56,7 +66,9 @@ export function Footprint({
   useEffect(() => () => controller.current?.abort(), []);
   const cards = state.summaries || [];
   const completions = completedLessons(state);
-  const activities = [...state.reviews, ...state.notes, ...cards, ...completions];
+  const guided = state.guidedSessions ?? [];
+  const guidedAnswers = guided.flatMap((s) => guidedEvidence(s).answers);
+  const activities = [...state.reviews, ...state.notes, ...cards, ...completions, ...guidedAnswers];
   const activeDays = new Set(activities.map((a) => dayKey(new Date(a.createdAt))));
   let streak = 0,
     cursor = activeDays.has(today) ? today : shift(today, -1);
@@ -113,6 +125,9 @@ export function Footprint({
   const dayNotes = state.notes.filter((n) => dayKey(new Date(n.createdAt)) === day);
   const dayCards = cards.filter((c) => dayKey(new Date(c.createdAt)) === day);
   const dayCompletions = completions.filter((c) => dayKey(new Date(c.createdAt)) === day);
+  const dayGuided = guided.filter((s) =>
+    guidedEvidence(s).answers.some((t) => dayKey(new Date(t.createdAt)) === day),
+  );
   return (
     <div className="page footprint-page">
       <div className="page-heading">
@@ -122,7 +137,9 @@ export function Footprint({
               ? '把学过的，再想起来。'
               : tab === 'gallery'
                 ? '把理解，留成一张图。'
-                : '学习留下的形状'}
+                : tab === 'guided'
+                  ? '回到你思考过的地方。'
+                  : '学习留下的形状'}
           </h1>
           <p>
             {tab === 'reviews'
@@ -138,6 +155,7 @@ export function Footprint({
           { id: 'calendar', label: '足迹日历', Icon: CalendarBlank },
           { id: 'reviews', label: '间隔复习', Icon: Repeat },
           { id: 'gallery', label: '总结画廊', Icon: Images },
+          { id: 'guided', label: '带学记录', Icon: ChatCircleText },
         ].map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -150,6 +168,32 @@ export function Footprint({
           </button>
         ))}
       </div>
+      {tab === 'guided' && (
+        <div className="guided-records">
+          {!guided.length && (
+            <div className="panel">
+              <h2>从一个问题，开始留下理解。</h2>
+              <p>进入任意小节，点击「跟导师学」。实际回答、用过的提示和待解决问题会保存在这里。</p>
+            </div>
+          )}
+          {[...guided].reverse().map((s) => (
+            <article className="panel" key={s.id}>
+              <span className="badge">
+                {s.endedAt ? '本轮已结束' : '可以接着学'} · {formatDay(s.createdAt)}
+              </span>
+              <h2>{source(s.courseId, s.lessonId).lesson?.title}</h2>
+              <p className="small muted">{source(s.courseId).course?.title}</p>
+              <GuidedRecord session={s} />
+              <Disclosure title="查看问题、实际回答与提示记录">
+                <Markdown>{guidedTranscript(s)}</Markdown>
+              </Disclosure>
+              <button className="quiet" onClick={() => navigate(`/learn/${s.courseId}/${s.lessonId}?guided`)}>
+                回到本节带学 <ArrowRight size={16} />
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
       {tab === 'calendar' && (
         <>
           <div className="activity-stats footprint-stats">
@@ -198,11 +242,14 @@ export function Footprint({
                   const notes = state.notes.filter((n) => dayKey(new Date(n.createdAt)) === date).length;
                   const summaries = cards.filter((c) => dayKey(new Date(c.createdAt)) === date).length;
                   const completed = completions.filter((c) => dayKey(new Date(c.createdAt)) === date).length;
+                  const guidedCount = guidedAnswers.filter(
+                    (t) => dayKey(new Date(t.createdAt)) === date,
+                  ).length;
                   return (
                     <button
                       key={date}
                       className={`${date.slice(0, 7) !== month ? 'outside' : ''} ${date === today ? 'today' : ''} ${date === day ? 'selected' : ''}`}
-                      aria-label={`${date}，${completed} 节学完，${reviews} 次练习，${notes} 条笔记，${summaries} 张总结`}
+                      aria-label={`${date}，${completed} 节学完，${reviews} 次练习，${guidedCount} 次带学提交，${notes} 条笔记，${summaries} 张总结`}
                       aria-pressed={date === day}
                       onClick={() => setDay(date)}
                     >
@@ -212,6 +259,7 @@ export function Footprint({
                         {!!reviews && <i className="practice" />}
                         {!!notes && <i className="note" />}
                         {!!summaries && <i className="image" />}
+                        {!!guidedCount && <i className="note" />}
                       </div>
                     </button>
                   );
@@ -243,13 +291,30 @@ export function Footprint({
                 {dayCompletions.length} 节学完 · {dayReviews.length} 次练习 · {dayNotes.length} 条笔记 ·{' '}
                 {dayCards.length} 张总结
               </p>
-              {!dayCompletions.length && !dayReviews.length && !dayNotes.length && !dayCards.length && (
-                <div className="footprint-empty">
-                  <CalendarBlank size={32} />
-                  <h3>这一天，还没有记录。</h3>
-                  <p>标记小节学完、完成回忆练习、记笔记或生成总结后，会在日历里留下足迹。</p>
+              {!dayGuided.length &&
+                !dayCompletions.length &&
+                !dayReviews.length &&
+                !dayNotes.length &&
+                !dayCards.length && (
+                  <div className="footprint-empty">
+                    <CalendarBlank size={32} />
+                    <h3>这一天，还没有记录。</h3>
+                    <p>标记小节学完、完成回忆练习、记笔记或生成总结后，会在日历里留下足迹。</p>
+                  </div>
+                )}
+              {dayGuided.map((s) => (
+                <div className="day-entry" key={s.id}>
+                  <span className="badge">带学思考</span>
+                  <h3>{source(s.courseId, s.lessonId).lesson?.title}</h3>
+                  <p>
+                    {guidedEvidence(s).answers.filter((t) => dayKey(new Date(t.createdAt)) === day).length}{' '}
+                    次实际提交
+                  </p>
+                  <button className="quiet" onClick={() => navigate('/activity?tab=guided')}>
+                    查看回答与提示记录 <ArrowRight size={15} />
+                  </button>
                 </div>
-              )}
+              ))}
               {dayCompletions.map((c) => (
                 <div className="day-entry completion-entry" key={`${c.courseId}:${c.lessonId}`}>
                   <span className="badge">小节已学完</span>

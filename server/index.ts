@@ -12,6 +12,7 @@ import { parseSummary } from './summaries';
 import type { Course, Note, Rating } from '../shared/types';
 import { reasoningEfforts } from '../shared/types';
 import { lessonCompletion } from '../shared/completions';
+import { guidedRouter } from './guided-routes';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -53,6 +54,7 @@ const stateResponse = () => ({
   storage: '本机文件',
   storagePath: dataDir,
 });
+app.use('/api/guided', guidedRouter(stateResponse));
 app.get('/api/bootstrap', async (req, res) => {
   if (req.query.refresh === '1') codexStatus(true);
   if (codexStatus().available) await listModels().catch(() => undefined);

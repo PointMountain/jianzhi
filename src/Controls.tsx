@@ -112,11 +112,13 @@ export function Disclosure({
   children,
   defaultOpen = false,
   className = '',
+  onOpenChange,
 }: {
   title: ReactNode;
   children: ReactNode;
   defaultOpen?: boolean;
   className?: string;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const id = useId();
@@ -127,7 +129,10 @@ export function Disclosure({
         className="disclosure-trigger"
         aria-expanded={open}
         aria-controls={id}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setOpen(!open);
+          onOpenChange?.(!open);
+        }}
       >
         <span className="disclosure-label">{title}</span>
         <CaretDown size={18} />

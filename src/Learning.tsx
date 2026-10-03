@@ -27,6 +27,8 @@ import { Modal } from './Modal';
 import { ModelSettings } from './ModelSettings';
 import { DeleteNote } from './DeleteNote';
 import { lessonCompletion } from '../shared/completions';
+import { currentQuestion } from '../shared/guided';
+import { GuidedLearning } from './GuidedLearning';
 
 export function Learning({
   data,
@@ -43,8 +45,8 @@ export function Learning({
   update: (data: Bootstrap) => void;
   toast: (message: string) => void;
 }) {
-  const [tab, setTab] = useState<'read' | 'recall'>(() =>
-    location.hash.endsWith('?recall') ? 'recall' : 'read',
+  const [tab, setTab] = useState<'read' | 'recall' | 'guided'>(() =>
+    location.hash.endsWith('?recall') ? 'recall' : location.hash.endsWith('?guided') ? 'guided' : 'read',
   );
   const [sideTab, setSideTab] = useState<'chat' | 'note'>('chat');
   const [leftCollapsed, setLeftCollapsed] = useState(
@@ -81,6 +83,37 @@ export function Learning({
   const messages = data.state.chats[key] ?? [];
   const progress = data.state.progress[key];
   const completion = lessonCompletion(data.state, course.id, lesson.id);
+  useEffect(() => {
+    // Keep a refresh on the same learning mode without remounting an active session.
+    const suffix = tab === 'read' ? '' : `?${tab}`;
+    history.replaceState(null, '', `#/learn/${course.id}/${lesson.id}${suffix}`);
+  }, [tab, course.id, lesson.id]);
+  const guided = data.state.guidedSessions?.find(
+    (s) => s.courseId === course.id && s.lessonId === lesson.id && !s.endedAt,
+  );
+  async function markGuidedMaterial() {
+    if (!guided) return;
+    const pending = guided.turns.find((t) => t.status === 'pending');
+    const question =
+      pending && ['start', 'transfer', 'practice'].includes(pending.action)
+        ? pending
+        : currentQuestion(guided);
+    if (!question) return;
+    localStorage.setItem(`guided-material:${guided.id}:${question.id}`, '1');
+    if (guided.turns.some((t) => t.action === 'material' && t.questionId === question.id)) return;
+    try {
+      update(
+        await request(`/guided/${guided.id}/turn`, { requestId: crypto.randomUUID(), action: 'material' }),
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  function readMaterial() {
+    if (tab === 'recall' && !feedback) setAssisted(true);
+    void markGuidedMaterial();
+    setTab('read');
+  }
   useEffect(() => {
     localStorage.setItem('jianzhi:outline-collapsed', String(leftCollapsed));
   }, [leftCollapsed]);
@@ -341,16 +374,18 @@ export function Learning({
         >
           <SidebarSimple size={21} />
         </button>
-        <button
-          className="icon-button tutor-toggle"
-          aria-label={rightCollapsed ? '展开右侧助手' : '收起右侧助手'}
-          title={rightCollapsed ? '展开右侧助手' : '收起右侧助手'}
-          aria-expanded={!rightCollapsed}
-          aria-controls="tutor-panel"
-          onClick={() => setRightCollapsed(!rightCollapsed)}
-        >
-          <ChatCircleText size={21} />
-        </button>
+        {tab !== 'guided' && (
+          <button
+            className="icon-button tutor-toggle"
+            aria-label={rightCollapsed ? '展开右侧助手' : '收起右侧助手'}
+            title={rightCollapsed ? '展开右侧助手' : '收起右侧助手'}
+            aria-expanded={!rightCollapsed}
+            aria-controls="tutor-panel"
+            onClick={() => setRightCollapsed(!rightCollapsed)}
+          >
+            <ChatCircleText size={21} />
+          </button>
+        )}
         <button
           className="icon-button outline-toggle"
           onClick={() => setOutline(!outline)}
@@ -366,7 +401,7 @@ export function Learning({
         </p>
       )}
       <div
-        className={`learning-layout ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}
+        className={`learning-layout ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed || tab === 'guided' ? 'right-collapsed' : ''}`}
       >
         <aside className="lesson-outline" id="lesson-outline" aria-label="学习路线">
           {outlineContent}
@@ -377,12 +412,20 @@ export function Learning({
         <main className="lesson-main" id="main-content" tabIndex={-1}>
           <div className="lesson-tabs" role="group" aria-label="学习方式">
             <button
-              className={tab === 'read' ? 'active' : ''}
-              aria-pressed={tab === 'read'}
+              className={tab === 'guided' ? 'active' : ''}
+              aria-pressed={tab === 'guided'}
               onClick={() => {
                 if (tab === 'recall' && !feedback) setAssisted(true);
-                setTab('read');
+                setTab('guided');
               }}
+            >
+              <ChatCircleText size={18} />
+              跟导师学
+            </button>
+            <button
+              className={tab === 'read' ? 'active' : ''}
+              aria-pressed={tab === 'read'}
+              onClick={readMaterial}
             >
               <BookOpen size={18} />
               阅读材料
@@ -390,12 +433,28 @@ export function Learning({
             <button
               aria-pressed={tab === 'recall'}
               className={tab === 'recall' ? 'active' : ''}
-              onClick={() => setTab('recall')}
+              onClick={() => {
+                if (tab === 'guided' && guided?.turns.some((t) => t.response)) setAssisted(true);
+                setTab('recall');
+              }}
             >
               <Sparkle size={18} />
               主动回忆
             </button>
             <span className="small muted">第 {course.lessons.indexOf(lesson) + 1} 小节</span>
+          </div>
+          <div hidden={tab !== 'guided'}>
+            <GuidedLearning
+              data={data}
+              course={course}
+              lesson={lesson}
+              active={tab === 'guided'}
+              update={update}
+              onRead={readMaterial}
+              onMaterial={() => void markGuidedMaterial()}
+              openSettings={() => setModelSettings(true)}
+              navigate={navigate}
+            />
           </div>
           {tab === 'read' ? (
             <article className="lesson-article" ref={article}>
@@ -408,6 +467,16 @@ export function Learning({
                 <Quotes size={16} />
                 划选正文，引用提问或记录笔记
               </p>
+              <div className="guided-entry">
+                <div>
+                  <strong>{guided ? '接着刚才的问题，继续想一想。' : '从一个问题开始，学得更深入。'}</strong>
+                  <p className="small muted">逐层提示，针对缺口补讲，再用新情境验证理解。</p>
+                </div>
+                <button className="outline-button" onClick={() => setTab('guided')}>
+                  {guided ? '继续带学' : '跟导师学'}
+                  <ArrowLeft size={16} style={{ transform: 'rotate(180deg)' }} />
+                </button>
+              </div>
               <Markdown book={course.id === 'ai-agent-book'}>{lesson.content}</Markdown>
               <div className="reading-end">
                 <span>读到这里，试着合上材料解释一次。</span>
@@ -435,7 +504,7 @@ export function Learning({
                 </button>
               </div>
             </article>
-          ) : (
+          ) : tab === 'recall' ? (
             <section className="recall-panel">
               <span className="eyebrow">RETRIEVAL PRACTICE</span>
               <h1>把理解说出来。</h1>
@@ -566,7 +635,7 @@ export function Learning({
                 </div>
               )}
             </section>
-          )}
+          ) : null}
         </main>
         <aside className="tutor-panel" id="tutor-panel" aria-label="学习助手面板">
           <div className="tutor-heading">

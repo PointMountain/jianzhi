@@ -89,6 +89,7 @@ export interface StudyState {
   reviews: Review[];
   notes: Note[];
   chats: Record<string, ChatMessage[]>;
+  guidedSessions?: import('./guided').GuidedSession[];
   summaries?: SummaryCard[];
   completions?: Record<string, LessonCompletion>;
   preferences: {

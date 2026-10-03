@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { StudyState } from '../shared/types';
 import { prepareWorkspace, resolveWorkspace } from './workspace';
 import { completedLessons } from '../shared/completions';
+import { guidedTranscript } from '../shared/guided';
 
 export const dataDir = resolveWorkspace();
 const stateFile = path.join(dataDir, 'study.json');
@@ -97,6 +98,17 @@ export function markdownExport(value = state): string {
       `回忆题：${card.nextQuestion}`,
       '',
       'Codex 生成，请结合原文核对。',
+      '',
+    );
+  }
+  lines.push('## 跟导师学', '');
+  for (const session of value.guidedSessions ?? []) {
+    const course = value.courses.find((c) => c.id === session.courseId);
+    const lesson = course?.lessons.find((l) => l.id === session.lessonId);
+    lines.push(
+      `### ${course?.title ?? session.courseId} / ${lesson?.title ?? session.lessonId}`,
+      '',
+      guidedTranscript(session),
       '',
     );
   }
