@@ -9,3 +9,17 @@
 - 模型选择只影响本工具发起的新请求，不修改用户全局 Codex 配置，也不接入 API Key 配置。
 - 新安装从空书架开始；不要在应用层写死特定书籍、技术栈或学习者背景。
 - 修改持久化逻辑时保留已有版本 1 数据；做破坏性迁移前备份，未知格式不能自动覆盖。
+
+## Agent skills
+
+### Issue tracker
+
+问题与规格使用 PointMountain/jianzhi 的 GitHub Issues。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用五个默认分诊标签。角色与标签映射详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+采用 single-context 布局：根目录 `GLOSSARY.md` 与 `docs/adr/`。阅读规则详见 `docs/agents/domain.md`。
