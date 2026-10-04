@@ -1,35 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type SetStateAction } from 'react';
 import {
   ArrowRight,
   BookBookmark,
   BookOpen,
-  CalendarBlank,
   CaretRight,
   Check,
   CheckCircle,
   CircleNotch,
-  Clock,
   DownloadSimple,
   FileText,
   GearSix,
-  GitBranch,
   Leaf,
   MagnifyingGlass,
-  Moon,
+  List,
   NotePencil,
   Play,
   Plus,
-  Quotes,
   Repeat,
-  Sparkle,
   Sun,
   Target,
-  TerminalWindow,
   TreeStructure,
   UploadSimple,
 } from '@phosphor-icons/react';
 import type { Bootstrap, Course, Note } from '../shared/types';
-import { courseProgress, dayKey, daysEnding, formatDay, request, toLesson } from './lib';
+import { courseProgress, dayKey, formatDay, request, toLesson } from './lib';
+import { Today } from './Today';
+import { saveRequest } from './save-request';
 import { NewCourse } from './NewCourse';
 import { Learning } from './Learning';
 import { Markdown } from './Markdown';
@@ -37,8 +33,9 @@ import { Modal } from './Modal';
 import { ModelSettings } from './ModelSettings';
 import { Footprint } from './Footprint';
 import { DeleteNote } from './DeleteNote';
-import { completedLessons, lessonCompletion } from '../shared/completions';
+import { lessonCompletion } from '../shared/completions';
 import { SelectField, Segmented, Disclosure } from './Controls';
+import { recentLesson, acceptSnapshot, localText, storeText } from './learning-state';
 
 const nav = [
   { path: '/today', label: '今日', icon: Sun },
@@ -63,29 +60,34 @@ export function App() {
       document.removeEventListener('visibilitychange', updateDay);
     };
   }, []);
-  const [data, setData] = useState<Bootstrap | null>(null),
+  const [data, storeData] = useState<Bootstrap | null>(null),
     [error, setError] = useState('');
+  const setData = useCallback(
+    (value: SetStateAction<Bootstrap | null>) =>
+      storeData((previous) =>
+        acceptSnapshot(previous, typeof value === 'function' ? value(previous) : value),
+      ),
+    [],
+  );
   const [route, setRoute] = useState(location.hash.slice(1) || '/today');
   const [theme, setTheme] = useState(
     () =>
-      localStorage.getItem('jianzhi-theme') ||
-      localStorage.getItem('learn-local-theme') ||
-      localStorage.getItem('shizhi-theme') ||
-      'light',
+      localText('jianzhi-theme') || localText('learn-local-theme') || localText('shizhi-theme') || 'light',
   );
   const [notice, setNotice] = useState(''),
-    [newCourse, setNewCourse] = useState(false),
     [initialTitle, setInitialTitle] = useState(''),
     [imported, setImported] = useState(false);
-  const [topic, setTopic] = useState(''),
-    [search, setSearch] = useState(''),
+  const [search, setSearch] = useState(''),
     [activeCourse, setActiveCourse] = useState('');
   const [noteModal, setNoteModal] = useState(false);
+  const [courseFilter, setCourseFilter] = useState('all');
+  const [navigationOpen, setNavigationOpen] = useState(false);
   const [savingGoal, setSavingGoal] = useState(false);
   const [goalError, setGoalError] = useState('');
   useEffect(() => {
     const change = () => {
       setRoute(location.hash.slice(1) || '/today');
+      setNavigationOpen(false);
       window.scrollTo(0, 0);
       requestAnimationFrame(() => document.getElementById('main-content')?.focus({ preventScroll: true }));
     };
@@ -94,7 +96,7 @@ export function App() {
   }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem('jianzhi-theme', theme);
+    storeText('jianzhi-theme', theme);
   }, [theme]);
   useEffect(() => {
     if (!notice) return;
@@ -118,7 +120,7 @@ export function App() {
   function create(title = '', isImport = false) {
     setInitialTitle(title);
     setImported(isImport);
-    setNewCourse(true);
+    navigate('/new');
   }
   if (!data)
     return (
@@ -144,22 +146,25 @@ export function App() {
     );
   const { state, today } = data;
   const due = Object.values(state.progress).filter((p) => p.due <= today);
-  const completions = completedLessons(state);
-  const totalLearned = completions.length;
-  const delayed = Object.values(state.progress).filter((p) => p.independentDates.length >= 2).length;
   const parts = route.split('?')[0].split('/').filter(Boolean);
   const course = state.courses.find((c) => c.id === parts[1]);
   const lesson = course?.lessons.find((l) => l.id === parts[2]);
   const learning = parts[0] === 'learn' && course && lesson;
   const selected = state.courses.find((c) => c.id === activeCourse) ?? state.courses[0];
-  const minutesToday = Math.floor(
-    state.reviews
-      .filter((r) => dayKey(new Date(r.createdAt)) === today)
-      .reduce((sum, r) => sum + r.seconds, 0) / 60,
-  );
-  const first = state.courses.find((c) => c.id === state.reviews.at(-1)?.courseId) ?? state.courses[0];
-  const next = first?.lessons.find((l) => !lessonCompletion(state, first.id, l.id)) ?? first?.lessons[0];
-  const week = daysEnding(today, 7);
+  const filteredCourses = state.courses.filter((c) => {
+    const count = courseProgress(c, state);
+    const started =
+      count > 0 ||
+      !!recentLesson(data.storagePath, state.courses, c.id) ||
+      state.guidedSessions?.some((s) => s.courseId === c.id);
+    return (
+      `${c.title} ${c.goal}`.toLowerCase().includes(search.trim().toLowerCase()) &&
+      (courseFilter === 'all' ||
+        (courseFilter === 'new' && !started) ||
+        (courseFilter === 'learning' && started && count < c.lessons.length) ||
+        (courseFilter === 'done' && count === c.lessons.length))
+    );
+  });
   return (
     <>
       <a
@@ -172,6 +177,27 @@ export function App() {
       >
         跳到主要内容
       </a>
+      <header className="mobile-app-bar">
+        <a href="#/today">渐知</a>
+        <button className="quiet" onClick={() => setNavigationOpen(true)}>
+          <List size={20} />
+          导航
+        </button>
+      </header>
+      <Modal title="前往" description="选择学习页面" open={navigationOpen} onOpenChange={setNavigationOpen}>
+        <nav className="mobile-navigation" aria-label="窄屏导航">
+          {[
+            ...nav,
+            { path: '/new', label: '添加主题', icon: Plus },
+            { path: '/settings', label: '设置', icon: GearSix },
+          ].map(({ path, label, icon: Icon }) => (
+            <a key={path} href={`#${path}`} onClick={() => setNavigationOpen(false)}>
+              <Icon size={20} />
+              {label}
+            </a>
+          ))}
+        </nav>
+      </Modal>
       <aside className="sidebar">
         <a href="#/today" className="brand" aria-label="渐知首页">
           <BookBookmark size={29} weight="duotone" />
@@ -203,15 +229,9 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <button onClick={() => create()} className="add-button" aria-label="新建学习主题">
+          <button onClick={() => create()} className="add-button" aria-label="添加主题">
             <Plus size={22} />
-          </button>
-          <button
-            className="icon-button"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label={theme === 'dark' ? '切换浅色模式' : '切换深色模式'}
-          >
-            {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+            <span>添加主题</span>
           </button>
           <a
             href="#/settings"
@@ -220,15 +240,13 @@ export function App() {
             aria-label="学习设置"
           >
             <GearSix size={21} />
+            <span>设置</span>
           </a>
-          <div className="avatar" title="我的本地学习空间">
-            我
-          </div>
         </div>
       </aside>
       {learning ? (
         <Learning
-          key={`${course.id}:${lesson.id}`}
+          key={`${data.storagePath}:${course.id}:${lesson.id}`}
           data={data}
           course={course}
           lesson={lesson}
@@ -237,13 +255,18 @@ export function App() {
           toast={setNotice}
         />
       ) : (
-        <main className="workspace" id="main-content" tabIndex={-1}>
+        <main
+          className="workspace"
+          id={route === '/new' ? undefined : 'main-content'}
+          tabIndex={-1}
+          hidden={route === '/new'}
+        >
           <header className="topbar">
             <div className="breadcrumb">
               渐知 · 本地学习工作台 <CaretRight size={13} />
               <span>
                 {nav.find((n) => n.path === route.split('?')[0])?.label ||
-                  (parts[0] === 'course' ? '课程详情' : '学习设置')}
+                  (parts[0] === 'course' ? '课程详情' : parts[0] === 'new' ? '添加主题' : '学习设置')}
               </span>
             </div>
             <div className="storage-state">
@@ -252,259 +275,7 @@ export function App() {
             </div>
           </header>
           {route === '/today' ? (
-            <div className="page today-page">
-              <div className="page-heading">
-                <div>
-                  <p className="date-label">
-                    {new Date(`${today}T12:00:00+08:00`).toLocaleDateString('zh-CN', {
-                      month: 'long',
-                      day: 'numeric',
-                      weekday: 'long',
-                    })}
-                  </p>
-                  <h1>今天，学懂一点。</h1>
-                  <p>带着好奇开始，带着理解离开。</p>
-                </div>
-                <div className="daily-goal">
-                  <Target size={18} />
-                  <span>
-                    每日目标 <strong>{state.preferences.dailyMinutes} 分钟</strong>
-                  </span>
-                </div>
-              </div>
-              <div className="today-grid">
-                <section className="main-column">
-                  <section className="discover panel">
-                    <div className="section-heading">
-                      <h2>你想弄懂什么？</h2>
-                      <Sparkle size={21} />
-                    </div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        create(topic);
-                      }}
-                    >
-                      <label className="sr-only" htmlFor="topic">
-                        想学习的主题
-                      </label>
-                      <input
-                        id="topic"
-                        value={topic}
-                        onChange={(e) => setTopic(e.target.value)}
-                        placeholder="一本书、一个概念，或一个一直没想明白的问题…"
-                        maxLength={120}
-                      />
-                      <button aria-label="创建这个学习主题" className="round-send" type="submit">
-                        <ArrowRight size={20} />
-                      </button>
-                    </form>
-                    <div className="discover-bottom">
-                      <button onClick={() => create('', true)}>
-                        <UploadSimple size={16} />
-                        导入学习材料
-                      </button>
-                      <span>也可以导入自己的材料</span>
-                    </div>
-                  </section>
-                  <div className="section-heading spaced">
-                    <h2>接着上次的小步</h2>
-                    <a href="#/courses">
-                      全部主题 <CaretRight size={14} />
-                    </a>
-                  </div>
-                  {first && next ? (
-                    <section className="continue-card panel">
-                      <div className="book-cover">
-                        <div className="cover-top">LOCAL / LEARNING</div>
-                        <BookOpen size={33} weight="thin" />
-                        <div>
-                          <span>正在学习</span>
-                          <strong>{first.title}</strong>
-                          <small>{first.lessons.length} 个值得弄懂的小节</small>
-                        </div>
-                        <div className="cover-bottom">
-                          学习手记 <span>01</span>
-                        </div>
-                      </div>
-                      <div className="continue-copy">
-                        <span className="badge">{totalLearned ? '继续学习' : '从零开始'}</span>
-                        <h3>{first.title}</h3>
-                        <p>{first.goal}</p>
-                        <div className="course-progress">
-                          <span>
-                            {courseProgress(first, state)} / {first.lessons.length} 个小节已学完
-                          </span>
-                          <span>
-                            {Math.round((courseProgress(first, state) / first.lessons.length) * 100)}%
-                          </span>
-                        </div>
-                        <div className="progress-track">
-                          <i
-                            style={{
-                              width: `${(courseProgress(first, state) / first.lessons.length) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <div className="continue-bottom">
-                          <span>
-                            <BookOpen size={16} />
-                            {next.title}
-                          </span>
-                          <button className="primary" onClick={() => navigate(toLesson(first, state))}>
-                            {totalLearned ? '继续学习' : '开始第一课'}
-                            <Play size={15} weight="fill" />
-                          </button>
-                        </div>
-                      </div>
-                    </section>
-                  ) : (
-                    <div className="empty panel">
-                      <BookOpen size={32} />
-                      <h3>第一段学习，从一个问题开始。</h3>
-                      <button className="primary" onClick={() => create()}>
-                        添加学习主题
-                      </button>
-                    </div>
-                  )}
-                  <section className="review-strip panel">
-                    <div className="review-icon">
-                      <Repeat size={23} />
-                    </div>
-                    <div>
-                      <h3>{due.length ? `${due.length} 个知识点，到了重逢的时候` : '今天还没有到期复习'}</h3>
-                      <p>
-                        {totalLearned
-                          ? '复习日期会跟着你的实际回答调整。'
-                          : '完成第一次回忆练习后，这里会提醒你回来巩固。'}
-                      </p>
-                    </div>
-                    <button className="quiet" onClick={() => navigate('/reviews')}>
-                      查看安排
-                      <CaretRight size={16} />
-                    </button>
-                  </section>
-                  <div className="section-heading spaced">
-                    <h2>让学习留下来</h2>
-                  </div>
-                  <div className="learning-loop">
-                    <div>
-                      <span>01</span>
-                      <BookOpen size={21} />
-                      <h3>读一小段</h3>
-                      <p>一次聚焦一个问题</p>
-                    </div>
-                    <CaretRight size={17} />
-                    <div>
-                      <span>02</span>
-                      <ChatIcon />
-                      <h3>说出你的理解</h3>
-                      <p>用自己的话解释</p>
-                    </div>
-                    <CaretRight size={17} />
-                    <div>
-                      <span>03</span>
-                      <Repeat size={21} />
-                      <h3>隔几天再想起</h3>
-                      <p>让理解慢慢变牢固</p>
-                    </div>
-                  </div>
-                </section>
-                <aside className="right-column">
-                  <section className="week-panel panel">
-                    <div className="section-heading">
-                      <h2>这一周</h2>
-                      <CalendarBlank size={18} />
-                    </div>
-                    <div className="week-grid">
-                      {week.map((day) => {
-                        const count = state.reviews.filter(
-                          (r) => dayKey(new Date(r.createdAt)) === day,
-                        ).length;
-                        const finished = completions.filter(
-                          (c) => dayKey(new Date(c.createdAt)) === day,
-                        ).length;
-                        return (
-                          <div key={day}>
-                            <span>
-                              {new Date(`${day}T12:00:00+08:00`).toLocaleDateString('zh-CN', {
-                                weekday: 'narrow',
-                              })}
-                            </span>
-                            <div
-                              className={`day-square ${day === today ? 'today' : ''} ${count || finished ? 'studied' : ''}`}
-                              title={`${day}：${finished} 节学完，${count} 次练习`}
-                            >
-                              {count || finished ? (
-                                <Check size={15} />
-                              ) : (
-                                new Date(`${day}T12:00:00+08:00`).getDate()
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="week-stats">
-                      <div>
-                        <strong>{totalLearned}</strong>
-                        <span>小节已学完</span>
-                      </div>
-                      <div>
-                        <strong>{state.reviews.length}</strong>
-                        <span>回忆练习</span>
-                      </div>
-                    </div>
-                    <div className="daily-track">
-                      <div>
-                        <span>今日专注</span>
-                        <strong>
-                          {minutesToday} <small>/ {state.preferences.dailyMinutes} 分钟</small>
-                        </strong>
-                      </div>
-                      <div className="progress-track">
-                        <i
-                          style={{
-                            width: `${Math.min(100, (minutesToday / state.preferences.dailyMinutes) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </section>
-                  <section className="notes-preview panel">
-                    <div className="section-heading">
-                      <h2>留个问号</h2>
-                      <Quotes size={19} />
-                    </div>
-                    {state.notes.some((n) => n.kind === 'question' && !n.resolved) ? (
-                      state.notes
-                        .filter((n) => n.kind === 'question' && !n.resolved)
-                        .slice(0, 2)
-                        .map((n) => (
-                          <p className="question-preview" key={n.id}>
-                            {n.content}
-                          </p>
-                        ))
-                    ) : (
-                      <p>遇到一个不熟悉的词，先记下来。问题也可以成为下一次学习的起点。</p>
-                    )}
-                    <button className="outline-button wide" onClick={() => setNoteModal(true)}>
-                      <Plus size={15} />
-                      记下一个疑问
-                    </button>
-                  </section>
-                  <section className="quiet-note">
-                    <span className="quote-mark">“</span>
-                    <p>
-                      能看懂，是起点。
-                      <br />
-                      能讲清楚，是下一步。
-                    </p>
-                    <span>记录真实的理解，不着急打勾。</span>
-                  </section>
-                </aside>
-              </div>
-            </div>
+            <Today data={data} create={create} navigate={navigate} />
           ) : route === '/courses' ? (
             <div className="page">
               <PageHeading
@@ -518,24 +289,26 @@ export function App() {
                 }
               />
               <div className="filter-row">
-                <span>{state.courses.length} 个学习主题</span>
+                <Segmented
+                  label="书架学习状态"
+                  value={courseFilter}
+                  onChange={setCourseFilter}
+                  options={[
+                    { value: 'all', label: '全部' },
+                    { value: 'new', label: '尚未开始' },
+                    { value: 'learning', label: '学习中' },
+                    { value: 'done', label: '已学完' },
+                  ]}
+                />
                 <Search value={search} change={setSearch} placeholder="搜索学习主题" />
               </div>
-              {search.trim() &&
-                !state.courses.some((c) =>
-                  `${c.title} ${c.goal}`.toLowerCase().includes(search.trim().toLowerCase()),
-                ) && (
-                  <Empty
-                    label="没有找到匹配的主题"
-                    description="试试更短的关键词，或清空搜索查看全部主题。"
-                  />
-                )}
+              {(search.trim() || courseFilter !== 'all') && !filteredCourses.length && (
+                <Empty label="没有找到匹配的主题" description="试试更短的关键词，或清空搜索查看全部主题。" />
+              )}
               <div className="courses-grid">
-                {state.courses
-                  .filter((c) => `${c.title} ${c.goal}`.toLowerCase().includes(search.trim().toLowerCase()))
-                  .map((c, i) => (
-                    <CourseCard key={c.id} course={c} data={data} index={i} navigate={navigate} />
-                  ))}
+                {filteredCourses.map((c) => (
+                  <CourseCard key={c.id} course={c} data={data} navigate={navigate} />
+                ))}
                 <button className="new-course-card" onClick={() => create('', true)}>
                   <UploadSimple size={29} />
                   <strong>带来新的学习材料</strong>
@@ -548,7 +321,7 @@ export function App() {
           ) : route === '/map' ? (
             <div className="page">
               <PageHeading
-                title="知识有了路线"
+                title="知识路线"
                 subtitle="看清知识之间的先后关系，找到你现在的位置。"
                 action={
                   <SelectField
@@ -582,39 +355,59 @@ export function App() {
                       </span>
                     </div>
                   </div>
-                  <div className="knowledge-map">
-                    {Array.from(new Set(selected.lessons.map((l) => l.chapterIndex))).map((ch, i) => {
-                      const lessons = selected.lessons.filter((l) => l.chapterIndex === ch);
-                      const done = lessons.filter((l) => lessonCompletion(state, selected.id, l.id)).length;
-                      const target =
-                        lessons.find((l) => !lessonCompletion(state, selected.id, l.id)) ?? lessons[0];
-                      return (
-                        <button
-                          className={`map-node ${target.id === selected.lessons.find((l) => !lessonCompletion(state, selected.id, l.id))?.id ? 'current' : ''} ${done === lessons.length ? 'done' : ''}`}
-                          key={ch}
-                          onClick={() => navigate(`/learn/${selected.id}/${target.id}`)}
-                        >
-                          <span className="node-number">{String(ch).padStart(2, '0')}</span>
-                          <h3>{lessons[0].chapter}</h3>
-                          <p>
-                            {lessons.length} 个小节 · {done} 个已学完
-                          </p>
-                          <div className="node-dots">
-                            {lessons.slice(0, 18).map((l) => (
-                              <i
-                                key={l.id}
-                                className={lessonCompletion(state, selected.id, l.id) ? 'done' : ''}
-                              />
-                            ))}
-                            {lessons.length > 18 && <small>+{lessons.length - 18}</small>}
-                          </div>
-                          <span className="node-link">
-                            {done ? '接着往前走' : '开始探索'}
-                            <CaretRight size={15} />
-                          </span>
-                        </button>
-                      );
-                    })}
+                  <div className="map-workspace">
+                    <div className="knowledge-map">
+                      {Array.from(new Set(selected.lessons.map((l) => l.chapterIndex))).map((ch, i) => {
+                        const lessons = selected.lessons.filter((l) => l.chapterIndex === ch);
+                        const done = lessons.filter((l) => lessonCompletion(state, selected.id, l.id)).length;
+                        const target =
+                          lessons.find((l) => !lessonCompletion(state, selected.id, l.id)) ?? lessons[0];
+                        return (
+                          <button
+                            className={`map-node ${target.id === selected.lessons.find((l) => !lessonCompletion(state, selected.id, l.id))?.id ? 'current' : ''} ${done === lessons.length ? 'done' : ''}`}
+                            key={ch}
+                            onClick={() => navigate(`/learn/${selected.id}/${target.id}`)}
+                          >
+                            <span className="node-number">{String(ch).padStart(2, '0')}</span>
+                            <h3>{lessons[0].chapter}</h3>
+                            <p>
+                              {lessons.length} 个小节 · {done} 个已学完
+                            </p>
+                            <div className="node-dots">
+                              {lessons.slice(0, 18).map((l) => (
+                                <i
+                                  key={l.id}
+                                  className={lessonCompletion(state, selected.id, l.id) ? 'done' : ''}
+                                />
+                              ))}
+                              {lessons.length > 18 && <small>+{lessons.length - 18}</small>}
+                            </div>
+                            <span className="node-link">
+                              {done ? '接着往前走' : '开始探索'}
+                              <CaretRight size={15} />
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <aside className="map-current resume-paper">
+                      <h2>现在，从这里继续</h2>
+                      <p>
+                        {
+                          selected.lessons.find((l) =>
+                            toLesson(selected, state, data.storagePath).endsWith('/' + l.id),
+                          )?.title
+                        }
+                      </p>
+                      <button
+                        className="primary"
+                        onClick={() => navigate(toLesson(selected, state, data.storagePath))}
+                      >
+                        继续学习
+                        <ArrowRight size={16} />
+                      </button>
+                      <p className="small muted">路线显示学习顺序。学完与掌握分别记录，复习用来检验理解。</p>
+                    </aside>
                   </div>
                   <p className="map-footnote">
                     路线表示学习顺序；是否真正记住，会在后续的回忆练习中留下证据。
@@ -630,7 +423,7 @@ export function App() {
             <NotesPage data={data} update={setData} toast={setNotice} open={() => setNoteModal(true)} />
           ) : route === '/settings' ? (
             <div className="page settings-page">
-              <PageHeading title="按自己的节奏" subtitle="学习需要持续，也需要留一点余地。" />
+              <PageHeading title="设置" subtitle="按自己的节奏学习。这里的模型选择只影响渐知的新请求。" />
               <section className="panel settings-panel">
                 <div className="section-heading">
                   <h2>每日学习目标</h2>
@@ -669,6 +462,18 @@ export function App() {
               )}
               <ModelSettings data={data} update={setData} toast={setNotice} />
               <section className="panel settings-panel">
+                <h2>外观</h2>
+                <Segmented
+                  label="外观"
+                  value={theme}
+                  onChange={setTheme}
+                  options={[
+                    { value: 'light', label: '纸白' },
+                    { value: 'dark', label: '深色' },
+                  ]}
+                />
+              </section>
+              <section className="panel settings-panel">
                 <h2>我的学习空间</h2>
                 <p>所有主题的资料、回答、笔记和复习记录，统一保存在本机。</p>
                 <p className="workspace-path">
@@ -690,7 +495,7 @@ export function App() {
                 </div>
               </section>
             </div>
-          ) : (
+          ) : route === '/new' ? null : (
             <div className="page">
               <Empty label="这里还没有内容" />
               <button className="primary" onClick={() => navigate('/today')}>
@@ -700,19 +505,25 @@ export function App() {
           )}
         </main>
       )}
-      <NewCourse
-        open={newCourse}
-        close={() => setNewCourse(false)}
-        initialTitle={initialTitle}
-        imported={imported}
-        saved={(result) => {
-          setData(result);
-          setNewCourse(false);
-          setTopic('');
-          navigate(`/course/${result.courseId}`);
-          setNotice('新的学习主题已准备好');
-        }}
-      />
+      <main
+        className="workspace"
+        id={route === '/new' ? 'main-content' : undefined}
+        tabIndex={-1}
+        hidden={route !== '/new'}
+      >
+        <NewCourse
+          storagePath={data.storagePath}
+          open={route === '/new'}
+          close={() => navigate('/courses')}
+          initialTitle={initialTitle}
+          imported={imported}
+          saved={(result) => {
+            setData(result);
+            navigate(`/course/${result.courseId}`);
+            setNotice('新的学习主题已准备好');
+          }}
+        />
+      </main>
       <NoteForm
         data={data}
         open={noteModal}
@@ -731,9 +542,6 @@ export function App() {
       )}
     </>
   );
-}
-function ChatIcon() {
-  return <Quotes size={21} />;
 }
 function PageHeading({
   title,
@@ -788,38 +596,42 @@ function Empty({ label, description }: { label: string; description?: string }) 
 function CourseCard({
   course,
   data,
-  index,
   navigate,
 }: {
   course: Course;
   data: Bootstrap;
-  index: number;
   navigate: (p: string) => void;
 }) {
   const count = courseProgress(course, data.state);
+  const recent = recentLesson(data.storagePath, [course], course.id);
+  const started = count > 0 || !!recent || data.state.guidedSessions?.some((s) => s.courseId === course.id);
   return (
-    <button className="course-card panel" onClick={() => navigate(`/course/${course.id}`)}>
-      <div className={`course-cover tone-${index % 3}`}>
-        <span>{String(index + 1).padStart(2, '0')}</span>
-        <BookOpen size={29} weight="thin" />
-        <h2>{course.title}</h2>
-        <small>{course.description}</small>
-      </div>
+    <article className="course-card panel">
       <div className="course-card-body">
-        <span className="small muted">{course.source}</span>
-        <h3>{course.title}</h3>
-        <p>{course.goal}</p>
-        <div className="course-progress">
-          <span>
-            {count} / {course.lessons.length} 小节
+        <div className="section-heading">
+          <span className="small muted">
+            <BookOpen size={17} />{' '}
+            {count === course.lessons.length ? '已学完' : started ? '学习中' : '尚未开始'}
           </span>
-          <span>{count ? '继续学习' : '尚未开始'}</span>
+          <a className="quiet" href={`#/course/${course.id}`}>
+            查看章节
+          </a>
         </div>
-        <div className="progress-track">
-          <i style={{ width: `${(count / course.lessons.length) * 100}%` }} />
+        <h2>
+          <a href={`#/course/${course.id}`}>{course.title}</a>
+        </h2>
+        <p>{recent?.lesson.title || course.goal}</p>
+        <div className="course-card-actions">
+          <span className="small muted">
+            {count} / {course.lessons.length} 小节已学完
+          </span>
+          <button className="quiet" onClick={() => navigate(toLesson(course, data.state, data.storagePath))}>
+            {started ? '继续上次学习' : '开始导师带学'}
+            <ArrowRight size={16} />
+          </button>
         </div>
       </div>
-    </button>
+    </article>
   );
 }
 function CourseDetail({
@@ -831,15 +643,19 @@ function CourseDetail({
   data: Bootstrap;
   navigate: (p: string) => void;
 }) {
+  const recent = recentLesson(data.storagePath, [course], course.id);
   return (
     <div className="page">
       <PageHeading
         title={course.title}
         subtitle={course.goal}
         action={
-          <button className="primary" onClick={() => navigate(toLesson(course, data.state))}>
+          <button
+            className="primary"
+            onClick={() => navigate(toLesson(course, data.state, data.storagePath))}
+          >
             <Play size={16} weight="fill" />
-            开始学习
+            {recent ? '继续上次学习' : '开始学习'}
           </button>
         }
       />
@@ -852,17 +668,34 @@ function CourseDetail({
           <BookOpen size={16} />
           {course.lessons.length} 个学习小节
         </span>
+        <span>
+          {courseProgress(course, data.state)} / {course.lessons.length} 小节已学完
+        </span>
         {course.sourceUrl && (
           <a href={course.sourceUrl} target="_blank" rel="noreferrer">
             查看来源
           </a>
         )}
       </div>
+      {recent && (
+        <section className="course-resume">
+          <div>
+            <h2>{recent.lesson.title}</h2>
+            <p>回到上次的模式和阅读位置</p>
+          </div>
+          <button
+            className="primary"
+            onClick={() => navigate(toLesson(course, data.state, data.storagePath))}
+          >
+            回到这一小节
+          </button>
+        </section>
+      )}
       <div className="chapter-list">
         {Array.from(new Set(course.lessons.map((l) => l.chapterIndex))).map((ch) => (
           <Disclosure
             key={ch}
-            defaultOpen={ch === 1}
+            defaultOpen={ch === (recent?.lesson.chapterIndex ?? course.lessons[0]?.chapterIndex)}
             title={
               <>
                 <span className="chapter-number">{String(ch).padStart(2, '0')}</span>
@@ -906,13 +739,15 @@ function NotesPage({
 }) {
   const [filter, setFilter] = useState('all'),
     [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState('');
   const notes = data.state.notes.filter(
     (n) => (filter === 'all' || n.kind === filter) && n.content.toLowerCase().includes(search.toLowerCase()),
   );
+  const selectedNote = notes.find((n) => n.id === selectedId) ?? notes[0];
   return (
     <div className="page">
       <PageHeading
-        title="我的理解，慢慢成形。"
+        title="笔记"
         subtitle="解释、疑问和自己的话，都值得有个归处。"
         action={
           <button className="primary" onClick={open}>
@@ -934,16 +769,37 @@ function NotesPage({
         />
         <Search value={search} change={setSearch} placeholder="搜索笔记与疑问" />
       </div>
-      <div className="notes-grid">
-        {notes.map((n) => (
-          <NoteCard
-            key={n.id}
-            note={n}
-            course={data.state.courses.find((c) => c.id === n.courseId)}
-            update={update}
-            toast={toast}
-          />
-        ))}
+      <div className="notes-workspace">
+        {!!notes.length && (
+          <nav className="note-list" aria-label="选择笔记">
+            {notes.map((n) => (
+              <button
+                key={n.id}
+                className={selectedNote?.id === n.id ? 'active' : ''}
+                aria-pressed={selectedNote?.id === n.id}
+                onClick={() => setSelectedId(n.id)}
+              >
+                <strong>{n.content.replace(/[#*`>]/g, '').slice(0, 65)}</strong>
+                <span>
+                  {data.state.courses.find((c) => c.id === n.courseId)?.title} · {formatDay(n.updatedAt)}
+                </span>
+              </button>
+            ))}
+          </nav>
+        )}
+        <div className="note-detail">
+          {data.state.notes.map((n) => (
+            <div key={n.id} hidden={n.id !== selectedNote?.id}>
+              <NoteCard
+                key={n.id}
+                note={n}
+                course={data.state.courses.find((c) => c.id === n.courseId)}
+                update={update}
+                toast={toast}
+              />
+            </div>
+          ))}
+        </div>
       </div>
       {!notes.length && (
         <Empty
@@ -1008,7 +864,17 @@ function NoteCard({
         </p>
       )}
       <div className="note-footer">
-        <span>{course?.title}</span>
+        <span>
+          {course?.title}
+          {course && (
+            <a
+              className="quiet"
+              href={note.lessonId ? `#/learn/${course.id}/${note.lessonId}` : `#/course/${course.id}`}
+            >
+              回到关联{note.lessonId ? '小节' : '主题'}
+            </a>
+          )}
+        </span>
         <div>
           {editing ? (
             <>
@@ -1085,7 +951,7 @@ function NoteForm({
           setBusy(true);
           setError('');
           try {
-            saved(await request('/notes', { courseId, content, kind }));
+            saved(await saveRequest('/notes', { courseId, content, kind }, data.storagePath));
             setContent('');
           } catch (e) {
             setError((e as Error).message);

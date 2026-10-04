@@ -18,6 +18,8 @@ async function check({ url, dataDir, space, reportPath }) {
   console.log({ taskSpaceId: task.spaceId });
   if ((await page.url()) === url) await page.reload();
   else await page.goto(url);
+  await page.waitForSelector('.lesson-tabs');
+  await page.click('text="自主阅读"');
   await page.waitForSelector('button[aria-label="暂停计时"]');
   await page.click('button[aria-label="暂停计时"]');
   await page.waitForFunction(() => document.querySelectorAll('.diagram-image > svg').length >= 2, undefined, {
@@ -94,11 +96,13 @@ async function check({ url, dataDir, space, reportPath }) {
   await page.evaluate(() => {
     window.__jianzhiRenderNodes = [...document.querySelectorAll('.diagram svg')];
   });
+  await page.click('button[aria-label="展开右侧助手"]');
   await page.fill('#chat-question', '浏览器渲染检查，不发送请求。');
   result.checks.composerPreservesDiagrams = await page.evaluate(() =>
     window.__jianzhiRenderNodes.every((node) => node.isConnected),
   );
   await page.fill('#chat-question', '');
+  await page.press('#chat-question', 'Escape');
   await page.evaluate(() => {
     delete window.__jianzhiRenderNodes;
   });

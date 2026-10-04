@@ -1,0 +1,237 @@
+{
+  "date": "2026-10-04",
+  "stage": "static-design",
+  "penFile": "jianzhi-visual-directions.pen",
+  "pdf": "previews/a2-full-site.pdf",
+  "frames": [
+    {
+      "id": "Z2EiR",
+      "name": "A2 已选定 · 设计系统",
+      "page": 1,
+      "preview": "previews/a2/design-system.png"
+    },
+    {
+      "id": "E8NHI",
+      "name": "A2 · 纸白 / 今日",
+      "page": 2,
+      "preview": "previews/a2/today.png"
+    },
+    {
+      "id": "aEVDF",
+      "name": "A2 · 纸白 / 书架 · Sitor 层级参考",
+      "page": 3,
+      "preview": "previews/a2/library.png"
+    },
+    {
+      "id": "r9AeZG",
+      "name": "A2 全站 · 认识 AI Agent",
+      "page": 4,
+      "preview": "previews/a2/course.png"
+    },
+    {
+      "id": "v5lH0",
+      "name": "A2 全站 · 知识路线",
+      "page": 5,
+      "preview": "previews/a2/map.png"
+    },
+    {
+      "id": "oAZvM",
+      "name": "A2 全站 · 首次进入带学",
+      "page": 6,
+      "preview": "previews/a2/guided-start.png"
+    },
+    {
+      "id": "unt3e",
+      "name": "A2 · 纸白 / 导师带学",
+      "page": 7,
+      "preview": "previews/a2/guided.png"
+    },
+    {
+      "id": "s697kf",
+      "name": "A2 全站 · 导师反馈与追问",
+      "page": 8,
+      "preview": "previews/a2/guided-feedback.png"
+    },
+    {
+      "id": "O7uEVd",
+      "name": "A2 全站 · 实作与迁移",
+      "page": 9,
+      "preview": "previews/a2/practice.png"
+    },
+    {
+      "id": "F2MdV",
+      "name": "A2 · 纸白 / 自主阅读",
+      "page": 10,
+      "preview": "previews/a2/reading.png"
+    },
+    {
+      "id": "AtYId",
+      "name": "A2 全站 · 阅读中的提问与笔记",
+      "page": 11,
+      "preview": "previews/a2/reading-tools.png"
+    },
+    {
+      "id": "Kw2pB",
+      "name": "A2 全站 · 复习",
+      "page": 12,
+      "preview": "previews/a2/reviews.png"
+    },
+    {
+      "id": "K0Bq7",
+      "name": "A2 全站 · 主动回忆",
+      "page": 13,
+      "preview": "previews/a2/recall.png"
+    },
+    {
+      "id": "PlXeF",
+      "name": "A2 全站 · 核对这次回忆",
+      "page": 14,
+      "preview": "previews/a2/recall-feedback.png"
+    },
+    {
+      "id": "tK8cv",
+      "name": "A2 全站 · 这次回忆，已经留下来了",
+      "page": 15,
+      "preview": "previews/a2/recall-saved.png"
+    },
+    {
+      "id": "MrWAA",
+      "name": "A2 全站 · 笔记",
+      "page": 16,
+      "preview": "previews/a2/notes.png"
+    },
+    {
+      "id": "u2QGJ",
+      "name": "A2 全站 · 足迹",
+      "page": 17,
+      "preview": "previews/a2/footprint.png"
+    },
+    {
+      "id": "eXx8C",
+      "name": "A2 全站 · 带学记录",
+      "page": 18,
+      "preview": "previews/a2/guided-records.png"
+    },
+    {
+      "id": "o0B9kN",
+      "name": "A2 全站 · 总结画廊",
+      "page": 19,
+      "preview": "previews/a2/gallery.png"
+    },
+    {
+      "id": "HXGHZ",
+      "name": "A2 全站 · 设置",
+      "page": 20,
+      "preview": "previews/a2/settings.png"
+    },
+    {
+      "id": "Mfuj4",
+      "name": "A2 全站 · 添加主题",
+      "page": 21,
+      "preview": "previews/a2/new-topic.png"
+    },
+    {
+      "id": "eM7ZD",
+      "name": "A2 全站 · 导入学习材料",
+      "page": 22,
+      "preview": "previews/a2/import-text.png"
+    },
+    {
+      "id": "LUxng",
+      "name": "A2 全站 · 从本地仓库学习",
+      "page": 23,
+      "preview": "previews/a2/import-repository.png"
+    },
+    {
+      "id": "NEBxt",
+      "name": "A2 全站 · 今日",
+      "page": 24,
+      "preview": "previews/a2/first-use.png"
+    },
+    {
+      "id": "kmPeN",
+      "name": "A2 全站 · 请求状态与恢复",
+      "page": 25,
+      "preview": "previews/a2/request-states.png"
+    },
+    {
+      "id": "AaOzN",
+      "name": "A2 全站 · 笔记、预览与辅助面板",
+      "page": 26,
+      "preview": "previews/a2/overlays.png"
+    },
+    {
+      "id": "H18nN",
+      "name": "A2 全站 · 学习收尾与长内容",
+      "page": 27,
+      "preview": "previews/a2/learning-states.png"
+    },
+    {
+      "id": "qVOPE",
+      "name": "A2 全站 · 空状态与筛选",
+      "page": 28,
+      "preview": "previews/a2/empty-states.png"
+    },
+    {
+      "id": "E3eMW",
+      "name": "A2 全站 · 新建与导入的恢复",
+      "page": 29,
+      "preview": "previews/a2/creation-states.png"
+    },
+    {
+      "id": "R1uqs",
+      "name": "A2 全站 · 辅助面板与模型状态",
+      "page": 30,
+      "preview": "previews/a2/auxiliary-states.png"
+    },
+    {
+      "id": "AAxuB",
+      "name": "A2 全站 · 窄屏与导航",
+      "page": 31,
+      "preview": "previews/a2/mobile.png"
+    },
+    {
+      "id": "NrpFG",
+      "name": "A2 全站 · 窄屏导师带学",
+      "page": 32,
+      "preview": "previews/a2/mobile-guided.png"
+    },
+    {
+      "id": "hxr2Y",
+      "name": "A2 全站 · 1024px 阅读",
+      "page": 33,
+      "preview": "previews/a2/tablet-reading.png"
+    },
+    {
+      "id": "IMVi4",
+      "name": "A2 全站 · 深色 / 今日",
+      "page": 34,
+      "preview": "previews/a2/dark-today.png"
+    },
+    {
+      "id": "Qs8jr",
+      "name": "A2 全站 · 深色 / 自主阅读",
+      "page": 35,
+      "preview": "previews/a2/dark-reading.png"
+    },
+    {
+      "id": "IUXTr",
+      "name": "A2 全站 · 1024px 导师带学",
+      "page": 36,
+      "preview": "previews/a2/tablet-guided.png"
+    },
+    {
+      "id": "qpgaZ",
+      "name": "A2 全站 · 深色 / 导师带学",
+      "page": 37,
+      "preview": "previews/a2/dark-guided.png"
+    },
+    {
+      "id": "v5EOs",
+      "name": "A2 全站 · 专注阅读",
+      "page": 38,
+      "preview": "previews/a2/focus-reading.png"
+    }
+  ],
+  "revision": "2026-10-04-density-and-focus"
+}

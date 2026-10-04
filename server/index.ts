@@ -13,6 +13,7 @@ import type { Course, Note, Rating } from '../shared/types';
 import { reasoningEfforts } from '../shared/types';
 import { lessonCompletion } from '../shared/completions';
 import { guidedRouter } from './guided-routes';
+import { saveRequests } from './save-requests';
 
 export const app = express();
 app.disable('x-powered-by');
@@ -55,6 +56,7 @@ const stateResponse = () => ({
   storagePath: dataDir,
 });
 app.use('/api/guided', guidedRouter(stateResponse));
+app.use(saveRequests(stateResponse));
 app.get('/api/bootstrap', async (req, res) => {
   if (req.query.refresh === '1') codexStatus(true);
   if (codexStatus().available) await listModels().catch(() => undefined);
@@ -102,6 +104,7 @@ app.post('/api/repositories/import', (req, res) => {
   const title = string(req.body.title, '主题名称', 120);
   const goal = string(req.body.goal, '学习目标', 500, true) || '理解项目结构、关键流程与设计取舍。';
   const course = importRepository(req.body.scanId, req.body.files, title, goal);
+  course.creationRequest = res.locals.creationRequest;
   updateState((s) => s.courses.push(course));
   res.status(201).json({ ...stateResponse(), courseId: course.id });
 });
@@ -143,6 +146,7 @@ app.post('/api/courses', (req, res) => {
   if (!sections.length) throw new Error('材料太短，请至少提供一段正文。');
   const course: Course = {
     id: randomUUID(),
+    creationRequest: res.locals.creationRequest,
     title,
     description: '我的学习材料',
     goal,
@@ -197,6 +201,7 @@ app.post('/api/reviews', (req, res) => {
     s.progress[key] = progress;
     s.reviews.push({
       id: randomUUID(),
+      creationRequest: res.locals.creationRequest,
       courseId: course.id,
       lessonId: lesson.id,
       answer,
@@ -220,6 +225,7 @@ app.post('/api/notes', (req, res) => {
   const now = new Date().toISOString();
   const note: Note = {
     id: randomUUID(),
+    creationRequest: res.locals.creationRequest,
     courseId,
     lessonId: lessonId || undefined,
     content,
@@ -336,6 +342,7 @@ app.post('/api/generate', async (req, res) => {
   });
   const course: Course = {
     id: randomUUID(),
+    creationRequest: res.locals.creationRequest,
     title,
     goal,
     description: '从一个问题开始',

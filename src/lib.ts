@@ -1,5 +1,6 @@
 import type { Bootstrap, Course, StudyState } from '../shared/types';
 import { lessonCompletion } from '../shared/completions';
+import { recentLesson } from './learning-state';
 export async function request<T = Bootstrap>(
   url: string,
   body?: unknown,
@@ -19,8 +20,11 @@ export async function request<T = Bootstrap>(
   return data;
 }
 export const keyFor = (c: string, l: string) => `${c}:${l}`;
-export const toLesson = (course: Course, state: StudyState) => {
-  const next = course.lessons.find((l) => !lessonCompletion(state, course.id, l.id)) ?? course.lessons[0];
+export const toLesson = (course: Course, state: StudyState, space?: string) => {
+  const next =
+    (space && recentLesson(space, [course], course.id)?.lesson) ||
+    course.lessons.find((l) => !lessonCompletion(state, course.id, l.id)) ||
+    course.lessons[0];
   return `/learn/${course.id}/${next.id}`;
 };
 export const courseProgress = (c: Course, s: StudyState) =>

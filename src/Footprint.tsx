@@ -285,7 +285,6 @@ export function Footprint({
               </div>
             </section>
             <section className="panel day-detail">
-              <span className="eyebrow">DAILY FOOTPRINT</span>
               <h2>{formatDay(day)}的足迹</h2>
               <p className="small muted">
                 {dayCompletions.length} 节学完 · {dayReviews.length} 次练习 · {dayNotes.length} 条笔记 ·{' '}
@@ -381,7 +380,6 @@ export function Footprint({
         <>
           <section className="panel review-overview">
             <div>
-              <span className="eyebrow">SPACED PRACTICE</span>
               <h2>隔一段时间，再把它想起来。</h2>
               <p>独立回忆后逐步延长间隔；需要提示时，回到短间隔。当天重复练习不会推进复习阶段。</p>
             </div>
@@ -478,7 +476,6 @@ export function Footprint({
         <>
           <section className="panel gallery-compose">
             <div>
-              <span className="eyebrow">KEEP THE ESSENCE</span>
               <h2>把一个小节，收进一张图。</h2>
               <p>
                 Codex 结合原文、你的笔记与回答生成要点，排成可下载的 PNG 图卡。共学中的 Mermaid

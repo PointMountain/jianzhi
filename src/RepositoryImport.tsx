@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { FolderOpen, ArrowUp, FileText } from '@phosphor-icons/react';
 import type { Bootstrap, DirectoryListing, RepositoryScan } from '../shared/types';
 import { request } from './lib';
+import { saveRequest } from './save-request';
 
-export function RepositoryImport({ saved }: { saved: (data: Bootstrap & { courseId: string }) => void }) {
+export function RepositoryImport({
+  saved,
+  active = true,
+  storagePath,
+}: {
+  saved: (data: Bootstrap & { courseId: string }) => void;
+  active?: boolean;
+  storagePath: string;
+}) {
   const [path, setPath] = useState(''),
     [listing, setListing] = useState<DirectoryListing | null>(null);
   const [scan, setScan] = useState<RepositoryScan | null>(null),
@@ -15,6 +24,12 @@ export function RepositoryImport({ saved }: { saved: (data: Bootstrap & { course
     [error, setError] = useState('');
   const abort = useRef<AbortController | null>(null);
   useEffect(() => () => abort.current?.abort(), []);
+  useEffect(() => {
+    if (!active) {
+      abort.current?.abort();
+      setBusy(false);
+    }
+  }, [active]);
   async function perform<T>(work: (signal: AbortSignal) => Promise<T>, done: (value: T) => void) {
     setBusy(true);
     setError('');
@@ -200,10 +215,10 @@ export function RepositoryImport({ saved }: { saved: (data: Bootstrap & { course
             onClick={() =>
               void perform(
                 (signal) =>
-                  request<Bootstrap & { courseId: string }>(
+                  saveRequest<Bootstrap & { courseId: string }>(
                     '/repositories/import',
                     { scanId: scan.id, files, title, goal },
-                    'POST',
+                    storagePath,
                     signal,
                   ),
                 saved,

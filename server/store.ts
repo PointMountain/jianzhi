@@ -154,6 +154,7 @@ export const getState = () => state;
 export function updateState(change: (draft: StudyState) => void): StudyState {
   const next = structuredClone(state);
   change(next);
+  next.revision = (state.revision ?? 0) + 1;
   persist(next);
   state = next;
   return state;

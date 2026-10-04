@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -15,11 +15,11 @@ import {
   Sparkle,
   TreeStructure,
   X,
-  SidebarSimple,
   GearSix,
 } from '@phosphor-icons/react';
 import type { Bootstrap, Course, Lesson, Rating } from '../shared/types';
 import { keyFor, request } from './lib';
+import { saveRequest } from './save-request';
 import { Markdown } from './Markdown';
 import { SelectionTools } from './SelectionTools';
 import { Segmented, Disclosure } from './Controls';
@@ -29,6 +29,16 @@ import { DeleteNote } from './DeleteNote';
 import { lessonCompletion } from '../shared/completions';
 import { currentQuestion } from '../shared/guided';
 import { GuidedLearning } from './GuidedLearning';
+import {
+  lessonStateKey,
+  readLocal,
+  writeLocal,
+  useLessonDraft,
+  localText,
+  storeText,
+  recentStateKey,
+  legacyLessonValue,
+} from './learning-state';
 
 export function Learning({
   data,
@@ -45,49 +55,108 @@ export function Learning({
   update: (data: Bootstrap) => void;
   toast: (message: string) => void;
 }) {
-  const [tab, setTab] = useState<'read' | 'recall' | 'guided'>(() =>
-    location.hash.endsWith('?recall') ? 'recall' : location.hash.endsWith('?guided') ? 'guided' : 'read',
-  );
+  const viewKey = lessonStateKey(data.storagePath, course.id, lesson.id);
+  const [tab, setTab] = useState<'read' | 'recall' | 'guided'>(() => {
+    const requested = location.hash.split('?')[1];
+    const saved = requested || readLocal(viewKey + ':mode', 'guided');
+    return saved === 'read' || saved === 'recall' ? saved : 'guided';
+  });
+  const [focusReading, setFocusReading] = useState(false);
+  const [fontSize, setFontSize] = useState(16);
+  const [readingPercent, setReadingPercent] = useState(0);
+  const [rating, setRating] = useState<Rating | null>(null);
+  const [completionActions, setCompletionActions] = useState(false);
+  const focusTrigger = useRef<HTMLElement | null>(null);
+  const alive = useRef(true);
+  const accept = (value: Bootstrap) => {
+    if (alive.current) update(value);
+  };
   const [sideTab, setSideTab] = useState<'chat' | 'note'>('chat');
-  const [leftCollapsed, setLeftCollapsed] = useState(
-    () => localStorage.getItem('jianzhi:outline-collapsed') === 'true',
-  );
-  const [rightCollapsed, setRightCollapsed] = useState(
-    () => localStorage.getItem('jianzhi:tutor-collapsed') === 'true',
-  );
+  const [rightCollapsed, setRightCollapsed] = useState(true);
   const [modelSettings, setModelSettings] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [checking, setChecking] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
   const feedbackAbort = useRef<AbortController | null>(null);
-  const [answer, setAnswer] = useState(() => localStorage.getItem(`draft:${course.id}:${lesson.id}`) || '');
-  const [message, setMessage] = useState(''),
-    [quote, setQuote] = useState(''),
-    [note, setNote] = useState('');
+  const [answer, setAnswer] = useLessonDraft(
+    viewKey + ':answer',
+    legacyLessonValue(data.storagePath, course.id, lesson.id, 'draft'),
+  );
+  const [message, setMessage] = useLessonDraft(viewKey + ':message');
+  const [quote, setQuote] = useLessonDraft(viewKey + ':quote');
+  const [note, setNote] = useLessonDraft(viewKey + ':note');
   const [kind, setKind] = useState<'note' | 'question'>('question');
   const [busy, setBusy] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState('');
   const [feedback, setFeedback] = useState(false),
-    [assisted, setAssisted] = useState(
-      () => localStorage.getItem(`draft-assisted:${course.id}:${lesson.id}`) === 'true',
+    [assisted, setAssisted] = useState(() =>
+      readLocal(
+        viewKey + ':assisted',
+        legacyLessonValue(data.storagePath, course.id, lesson.id, 'draft-assisted') === 'true',
+      ),
     ),
     [submitted, setSubmitted] = useState(false);
   const [seconds, setSeconds] = useState(0),
     [paused, setPaused] = useState(false),
     [outline, setOutline] = useState(false);
   const abort = useRef<AbortController | null>(null),
-    article = useRef<HTMLElement>(null),
-    chatEnd = useRef<HTMLDivElement>(null);
+    article = useRef<HTMLElement>(null);
+  const chatPane = useRef<HTMLDivElement>(null);
+  const chatAtEnd = useRef(true);
+  const [newChat, setNewChat] = useState(false);
   const key = keyFor(course.id, lesson.id);
   const messages = data.state.chats[key] ?? [];
   const progress = data.state.progress[key];
   const completion = lessonCompletion(data.state, course.id, lesson.id);
   useEffect(() => {
+    const change = () => {
+      const [path, mode] = location.hash.split('?');
+      if (path !== `#/learn/${course.id}/${lesson.id}`) return;
+      if (mode === 'guided' || mode === 'read' || mode === 'recall') setTab(mode);
+    };
+    window.addEventListener('hashchange', change);
+    return () => window.removeEventListener('hashchange', change);
+  }, [course.id, lesson.id]);
+  useEffect(() => {
     // Keep a refresh on the same learning mode without remounting an active session.
-    const suffix = tab === 'read' ? '' : `?${tab}`;
+    const suffix = `?${tab}`;
     history.replaceState(null, '', `#/learn/${course.id}/${lesson.id}${suffix}`);
-  }, [tab, course.id, lesson.id]);
+    writeLocal(viewKey + ':mode', tab);
+    const recent = { courseId: course.id, lessonId: lesson.id };
+    writeLocal(recentStateKey(data.storagePath), recent);
+    writeLocal(recentStateKey(data.storagePath, course.id), recent);
+  }, [tab, course.id, lesson.id, viewKey, data.storagePath]);
+  useEffect(() => {
+    writeLocal(viewKey + ':assisted', assisted || feedback);
+    if (assisted) setRating((value) => (value === 'good' ? null : value));
+  }, [assisted, feedback, viewKey]);
+  useLayoutEffect(() => {
+    if (article.current) article.current.scrollTop = readLocal(viewKey + ':scroll', 0);
+  }, [viewKey, focusReading, tab]);
+  function enterFocus() {
+    focusTrigger.current = document.activeElement as HTMLElement;
+    if (tab === 'recall' && !feedback) setAssisted(true);
+    void markGuidedMaterial();
+    setFocusReading(true);
+  }
+  function exitFocus() {
+    setFocusReading(false);
+    requestAnimationFrame(() => focusTrigger.current?.focus({ preventScroll: true }));
+  }
+  useEffect(() => {
+    document.body.classList.toggle('reading-focus', focusReading);
+    if (focusReading) document.getElementById('exit-reading-focus')?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && !document.querySelector('[role="dialog"]'))
+        exitFocus();
+    };
+    if (focusReading) window.addEventListener('keydown', escape);
+    return () => {
+      document.body.classList.remove('reading-focus');
+      window.removeEventListener('keydown', escape);
+    };
+  }, [focusReading]);
   const guided = data.state.guidedSessions?.find(
     (s) => s.courseId === course.id && s.lessonId === lesson.id && !s.endedAt,
   );
@@ -99,10 +168,11 @@ export function Learning({
         ? pending
         : currentQuestion(guided);
     if (!question) return;
-    localStorage.setItem(`guided-material:${guided.id}:${question.id}`, '1');
+    if (localText(`guided-material:${guided.id}:${question.id}`) === '1') return;
+    storeText(`guided-material:${guided.id}:${question.id}`, '1');
     if (guided.turns.some((t) => t.action === 'material' && t.questionId === question.id)) return;
     try {
-      update(
+      accept(
         await request(`/guided/${guided.id}/turn`, { requestId: crypto.randomUUID(), action: 'material' }),
       );
     } catch (e) {
@@ -115,39 +185,24 @@ export function Learning({
     setTab('read');
   }
   useEffect(() => {
-    localStorage.setItem('jianzhi:outline-collapsed', String(leftCollapsed));
-  }, [leftCollapsed]);
-  useEffect(() => {
-    localStorage.setItem('jianzhi:tutor-collapsed', String(rightCollapsed));
-  }, [rightCollapsed]);
-  useEffect(() => {
-    if (submitted) {
-      localStorage.removeItem(`draft:${course.id}:${lesson.id}`);
-      localStorage.removeItem(`draft-assisted:${course.id}:${lesson.id}`);
-    } else {
-      localStorage.setItem(`draft:${course.id}:${lesson.id}`, answer);
-      localStorage.setItem(`draft-assisted:${course.id}:${lesson.id}`, String(assisted || feedback));
-    }
-  }, [answer, assisted, feedback, submitted, course.id, lesson.id]);
-  useEffect(() => {
     const id = setInterval(() => {
       if (!paused && document.visibilityState === 'visible') setSeconds((s) => s + 1);
     }, 1000);
     return () => clearInterval(id);
   }, [paused]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
       abort.current?.abort();
       feedbackAbort.current?.abort();
-    },
-    [],
-  );
+    };
+  }, []);
   useEffect(() => {
-    chatEnd.current?.scrollIntoView({
-      block: 'nearest',
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-    });
-  }, [messages.length, busy]);
+    if (chatAtEnd.current && !rightCollapsed && chatPane.current)
+      chatPane.current.scrollTop = chatPane.current.scrollHeight;
+    else if (messages.length) setNewChat(true);
+  }, [messages.length, busy, rightCollapsed]);
   async function ask(text = message) {
     if (!text.trim() || busy || checking) return;
     if (tab === 'recall' && !feedback) setAssisted(true);
@@ -167,7 +222,8 @@ export function Learning({
         'POST',
         abort.current.signal,
       );
-      update(result);
+      if (!alive.current) return;
+      accept(result);
       setMessage('');
       setQuote('');
     } catch (e) {
@@ -177,13 +233,25 @@ export function Learning({
     }
   }
   async function saveNote(content = note, type = kind, includeQuote = false) {
+    const savesDraft = content === note || includeQuote;
     if (includeQuote && quote) content = `> ${quote.replace(/\n/g, '\n> ')}\n\n${content}`.trim();
     if (!content.trim()) return;
     setSaving(true);
     setError('');
     try {
-      update(await request('/notes', { courseId: course.id, lessonId: lesson.id, content, kind: type }));
-      setNote('');
+      const result = await saveRequest(
+        '/notes',
+        {
+          courseId: course.id,
+          lessonId: lesson.id,
+          content,
+          kind: type,
+        },
+        viewKey,
+      );
+      if (!alive.current) return;
+      accept(result);
+      if (savesDraft) setNote('');
       if (includeQuote) setQuote('');
       toast(type === 'question' ? '疑问已留下，之后可以接着讨论' : '已保存到笔记本');
     } catch (e) {
@@ -197,20 +265,27 @@ export function Learning({
     setSaving(true);
     setError('');
     try {
-      const result = await request('/reviews', {
-        courseId: course.id,
-        lessonId: lesson.id,
-        answer,
-        rating,
-        revealed: assisted,
-        seconds,
-        feedback: feedbackText,
-      });
-      update(result);
+      const result = await saveRequest(
+        '/reviews',
+        {
+          courseId: course.id,
+          lessonId: lesson.id,
+          answer,
+          rating,
+          revealed: assisted,
+          seconds,
+          feedback: feedbackText,
+        },
+        viewKey,
+      );
+      if (!alive.current) return;
+      accept(result);
+      setAnswer('');
+      writeLocal(viewKey + ':assisted', false);
       setSubmitted(true);
       setPaused(true);
       setSeconds(0);
-      localStorage.removeItem(`draft:${course.id}:${lesson.id}`);
+      storeText(`draft:${course.id}:${lesson.id}`, null);
       toast('本节已学完，回答已保存，下一次复习已安排');
     } catch (e) {
       setError((e as Error).message);
@@ -251,7 +326,9 @@ export function Learning({
     setSaving(true);
     setError('');
     try {
-      update(await request('/completions', { courseId: course.id, lessonId: lesson.id }));
+      accept(await request('/completions', { courseId: course.id, lessonId: lesson.id }));
+      if (!alive.current) return;
+      setCompletionActions(true);
       toast('本节已学完，已记录到足迹');
     } catch (e) {
       setError((e as Error).message);
@@ -310,12 +387,13 @@ export function Learning({
     </>
   );
   return (
-    <div className="learning-shell">
-      {tab === 'read' && (
+    <div className={`learning-shell mode-${tab} ${focusReading ? 'is-focused' : ''}`}>
+      {(tab !== 'recall' || focusReading) && (
         <SelectionTools
           article={article}
           capture={setQuote}
           choose={(target) => {
+            if (focusReading) setFocusReading(false);
             setSideTab(target);
             setRightCollapsed(false);
             if (target === 'note') setKind('note');
@@ -364,17 +442,14 @@ export function Learning({
             {paused ? <Play size={15} /> : <Pause size={15} />}
           </button>
         </div>
-        <button
-          className="icon-button desktop-outline-toggle"
-          aria-label={leftCollapsed ? '展开左侧目录' : '收起左侧目录'}
-          title={leftCollapsed ? '展开左侧目录' : '收起左侧目录'}
-          aria-expanded={!leftCollapsed}
-          aria-controls="lesson-outline"
-          onClick={() => setLeftCollapsed(!leftCollapsed)}
-        >
-          <SidebarSimple size={21} />
+        <button className="quiet" onClick={enterFocus}>
+          专注阅读
         </button>
-        {tab !== 'guided' && (
+        <button className="quiet" onClick={() => setOutline(true)}>
+          <List size={18} />
+          章节
+        </button>
+        {
           <button
             className="icon-button tutor-toggle"
             aria-label={rightCollapsed ? '展开右侧助手' : '收起右侧助手'}
@@ -383,9 +458,9 @@ export function Learning({
             aria-controls="tutor-panel"
             onClick={() => setRightCollapsed(!rightCollapsed)}
           >
-            <ChatCircleText size={21} />
+            <NotePencil size={21} />
           </button>
-        )}
+        }
         <button
           className="icon-button outline-toggle"
           onClick={() => setOutline(!outline)}
@@ -395,17 +470,40 @@ export function Learning({
           <List size={22} />
         </button>
       </header>
+      {focusReading && (
+        <header className="focus-toolbar">
+          <button id="exit-reading-focus" className="outline-button" onClick={exitFocus}>
+            退出专注阅读
+          </button>
+          <span>{lesson.title}</span>
+          <button className="quiet" onClick={() => setOutline(true)}>
+            章节
+          </button>
+          <button
+            className="quiet"
+            aria-label="减小字号"
+            disabled={fontSize <= 14}
+            onClick={() => setFontSize(fontSize - 1)}
+          >
+            A−
+          </button>
+          <button
+            className="quiet"
+            aria-label="增大字号"
+            disabled={fontSize >= 22}
+            onClick={() => setFontSize(fontSize + 1)}
+          >
+            A＋
+          </button>
+          <span className="small">{readingPercent}%</span>
+        </header>
+      )}
       {error && (
         <p className="error learning-error" role="alert">
           {error}
         </p>
       )}
-      <div
-        className={`learning-layout ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed || tab === 'guided' ? 'right-collapsed' : ''}`}
-      >
-        <aside className="lesson-outline" id="lesson-outline" aria-label="学习路线">
-          {outlineContent}
-        </aside>
+      <div className="learning-layout">
         <Modal title="学习路线" description={course.title} open={outline} onOpenChange={setOutline}>
           <div className="outline-dialog">{outlineContent}</div>
         </Modal>
@@ -420,7 +518,7 @@ export function Learning({
               }}
             >
               <ChatCircleText size={18} />
-              跟导师学
+              导师带学
             </button>
             <button
               className={tab === 'read' ? 'active' : ''}
@@ -428,7 +526,7 @@ export function Learning({
               onClick={readMaterial}
             >
               <BookOpen size={18} />
-              阅读材料
+              自主阅读
             </button>
             <button
               aria-pressed={tab === 'recall'}
@@ -443,70 +541,100 @@ export function Learning({
             </button>
             <span className="small muted">第 {course.lessons.indexOf(lesson) + 1} 小节</span>
           </div>
-          <div hidden={tab !== 'guided'}>
+          {tab === 'guided' && (
+            <div className="material-summary">
+              <strong>{lesson.title}</strong>
+              <p>{lesson.content.replace(/[#`*]/g, '').slice(0, 90)}…</p>
+              <button className="outline-button" onClick={enterFocus}>
+                展开全文
+              </button>
+            </div>
+          )}
+          <div className="guided-pane" hidden={tab !== 'guided' || focusReading}>
             <GuidedLearning
               data={data}
               course={course}
               lesson={lesson}
-              active={tab === 'guided'}
-              update={update}
-              onRead={readMaterial}
+              active={tab === 'guided' && !focusReading}
+              update={accept}
+              onRead={enterFocus}
               onMaterial={() => void markGuidedMaterial()}
               openSettings={() => setModelSettings(true)}
               navigate={navigate}
             />
           </div>
-          {tab === 'read' ? (
-            <article className="lesson-article" ref={article}>
-              <div className="source-label">
-                {course.source} {lesson.source && <span> / {lesson.source}</span>}
+          <article
+            className="lesson-article"
+            ref={article}
+            hidden={tab === 'recall' && !focusReading}
+            tabIndex={0}
+            aria-label="本节原文"
+            style={{ fontSize }}
+            onScroll={(event) => {
+              const element = event.currentTarget;
+              if (!element.clientHeight) return;
+              writeLocal(viewKey + ':scroll', element.scrollTop);
+              setReadingPercent(
+                Math.round(
+                  (100 * element.scrollTop) / Math.max(1, element.scrollHeight - element.clientHeight),
+                ),
+              );
+            }}
+            onPointerDown={() => {
+              if (tab === 'guided') void markGuidedMaterial();
+            }}
+            onKeyDown={() => {
+              if (tab === 'guided') void markGuidedMaterial();
+            }}
+          >
+            <div className="source-label">
+              {course.source} {lesson.source && <span> / {lesson.source}</span>}
+            </div>
+            <h1>{lesson.title}</h1>
+            <p className="lesson-goal">这一节，试着用自己的话解释它，并举出一个具体例子。</p>
+            <p className="quote-button">
+              <Quotes size={16} />
+              划选正文，引用提问或记录笔记
+            </p>
+            <div className="guided-entry" hidden={tab !== 'read' || focusReading}>
+              <div>
+                <strong>{guided ? '接着刚才的问题，继续想一想。' : '从一个问题开始，学得更深入。'}</strong>
+                <p className="small muted">逐层提示，针对缺口补讲，再用新情境验证理解。</p>
               </div>
-              <h1>{lesson.title}</h1>
-              <p className="lesson-goal">这一节，试着用自己的话解释它，并举出一个具体例子。</p>
-              <p className="quote-button">
-                <Quotes size={16} />
-                划选正文，引用提问或记录笔记
-              </p>
-              <div className="guided-entry">
-                <div>
-                  <strong>{guided ? '接着刚才的问题，继续想一想。' : '从一个问题开始，学得更深入。'}</strong>
-                  <p className="small muted">逐层提示，针对缺口补讲，再用新情境验证理解。</p>
-                </div>
-                <button className="outline-button" onClick={() => setTab('guided')}>
-                  {guided ? '继续带学' : '跟导师学'}
-                  <ArrowLeft size={16} style={{ transform: 'rotate(180deg)' }} />
-                </button>
-              </div>
-              <Markdown book={course.id === 'ai-agent-book'}>{lesson.content}</Markdown>
-              <div className="reading-end">
-                <span>读到这里，试着合上材料解释一次。</span>
-                <button className="primary" onClick={() => setTab('recall')}>
-                  开始主动回忆
-                </button>
-                <button
-                  className="outline-button"
-                  disabled={saving || !!completion}
-                  onClick={() => void completeLesson()}
-                >
-                  <Check size={16} /> {completion ? '本节已学完' : '学完本节，记录到足迹'}
-                </button>
-                <span className="small muted">学完记录学习足迹；完成回忆自评后才会安排复习。</span>
-                <button
-                  className="quiet"
-                  onClick={() =>
-                    navigate(
-                      `/activity?tab=gallery&course=${encodeURIComponent(course.id)}&lesson=${encodeURIComponent(lesson.id)}`,
-                    )
-                  }
-                >
-                  <Sparkle size={16} />
-                  整理本节总结图卡
-                </button>
-              </div>
-            </article>
-          ) : tab === 'recall' ? (
-            <section className="recall-panel">
-              <span className="eyebrow">RETRIEVAL PRACTICE</span>
+              <button className="outline-button" onClick={() => setTab('guided')}>
+                {guided ? '继续带学' : '跟导师学'}
+                <ArrowLeft size={16} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+            </div>
+            <Markdown book={course.id === 'ai-agent-book'}>{lesson.content}</Markdown>
+            <div className="reading-end" hidden={focusReading || tab === 'guided'}>
+              <span>读到这里，试着合上材料解释一次。</span>
+              <button className="primary" onClick={() => setTab('recall')}>
+                开始主动回忆
+              </button>
+              <button
+                className="outline-button"
+                disabled={saving || !!completion}
+                onClick={() => void completeLesson()}
+              >
+                <Check size={16} /> {completion ? '本节已学完' : '学完本节，记录到足迹'}
+              </button>
+              <span className="small muted">学完记录学习足迹；完成回忆自评后才会安排复习。</span>
+              <button
+                className="quiet"
+                onClick={() =>
+                  navigate(
+                    `/activity?tab=gallery&course=${encodeURIComponent(course.id)}&lesson=${encodeURIComponent(lesson.id)}`,
+                  )
+                }
+              >
+                <Sparkle size={16} />
+                整理本节总结图卡
+              </button>
+            </div>
+          </article>
+          {tab === 'recall' && (
+            <section className="recall-panel" hidden={focusReading}>
               <h1>把理解说出来。</h1>
               <p className="muted">先回想，再核对。说不清的地方，就是下一步要学的。</p>
               <div className="question-card">
@@ -588,19 +716,31 @@ export function Learning({
                   </Disclosure>
                   <h3>回看刚才提交的解释，选择本次结果</h3>
                   <p className="small muted">
-                    点击后保存回答并安排复习。评价的是核对前的回答；点评仅供参考，不会自动判定掌握。
+                    先选择，再保存本次结果。评价的是核对前的回答；点评仅供参考，不会自动判定掌握。
                   </p>
                   {assisted && (
                     <p className="small muted">回答前已看过材料、提示或旧对话，本次不计为独立回忆。</p>
                   )}
                   <div className="rating-buttons">
-                    <button disabled={saving || checking} onClick={() => void rate('again')}>
+                    <button
+                      aria-pressed={rating === 'again'}
+                      disabled={saving || checking}
+                      onClick={() => setRating('again')}
+                    >
                       还没记住<small>仍讲不清 · 明天再练</small>
                     </button>
-                    <button disabled={saving || checking} onClick={() => void rate('hint')}>
+                    <button
+                      aria-pressed={rating === 'hint'}
+                      disabled={saving || checking}
+                      onClick={() => setRating('hint')}
+                    >
                       提示后能解释<small>借助提示才想起 · 明天再练</small>
                     </button>
-                    <button disabled={saving || checking || assisted} onClick={() => void rate('good')}>
+                    <button
+                      aria-pressed={rating === 'good'}
+                      disabled={saving || checking || assisted}
+                      onClick={() => setRating('good')}
+                    >
                       独立解释
                       <small>
                         {assisted
@@ -611,6 +751,13 @@ export function Learning({
                       </small>
                     </button>
                   </div>
+                  <button
+                    className="primary"
+                    disabled={!rating || saving || checking}
+                    onClick={() => rating && void rate(rating)}
+                  >
+                    {saving ? '正在保存…' : '保存本次结果'}
+                  </button>
                   <p className="small muted">
                     独立回忆按 1、3、7、14、30 天安排；到期且跨日完成才推进，当天重复不会拉长间隔。
                   </p>
@@ -635,209 +782,260 @@ export function Learning({
                 </div>
               )}
             </section>
-          ) : null}
+          )}
         </main>
-        <aside className="tutor-panel" id="tutor-panel" aria-label="学习助手面板">
-          <div className="tutor-heading">
-            <div className="tutor-mark">
-              <Sparkle size={19} />
+        <Modal
+          title="提问与笔记"
+          description="关闭面板会保留尚未提交的草稿。"
+          open={!rightCollapsed && !focusReading}
+          onOpenChange={(open) => setRightCollapsed(!open)}
+        >
+          <aside className="tutor-panel" id="tutor-panel" aria-label="学习助手面板">
+            <div className="tutor-heading">
+              <div className="tutor-mark">
+                <Sparkle size={19} />
+              </div>
+              <div>
+                <strong>一起弄懂</strong>
+                <span>
+                  Codex ·{' '}
+                  {data.state.preferences.codexModel === '@global'
+                    ? data.codex.globalModel
+                    : data.state.preferences.codexModel || data.codex.defaultModel || 'CLI 默认'}
+                </span>
+              </div>
+              <span
+                className={`connection-dot ${data.codex.authenticated ? 'connected' : ''}`}
+                title={data.codex.authenticated ? 'Codex 已登录' : 'Codex 未登录'}
+              />
             </div>
-            <div>
-              <strong>一起弄懂</strong>
+            <button
+              className="model-shortcut"
+              onClick={() => setModelSettings(true)}
+              aria-label="快捷设置模型、Effort 和 Fast"
+            >
+              <GearSix size={16} />
               <span>
-                Codex ·{' '}
                 {data.state.preferences.codexModel === '@global'
                   ? data.codex.globalModel
-                  : data.state.preferences.codexModel || data.codex.defaultModel || 'CLI 默认'}
+                  : data.state.preferences.codexModel || data.codex.defaultModel || '选择模型'}
               </span>
-            </div>
-            <span
-              className={`connection-dot ${data.codex.authenticated ? 'connected' : ''}`}
-              title={data.codex.authenticated ? 'Codex 已登录' : 'Codex 未登录'}
-            />
-          </div>
-          <button
-            className="model-shortcut"
-            onClick={() => setModelSettings(true)}
-            aria-label="快捷设置模型、Effort 和 Fast"
-          >
-            <GearSix size={16} />
-            <span>
-              {data.state.preferences.codexModel === '@global'
-                ? data.codex.globalModel
-                : data.state.preferences.codexModel || data.codex.defaultModel || '选择模型'}
-            </span>
-            <small>
-              {data.state.preferences.codexEffort || '默认强度'} · Fast{' '}
-              {data.state.preferences.codexFast ? '开' : '关'}
-            </small>
-          </button>
-          <div className="side-tabs" role="group" aria-label="学习助手">
-            <button
-              aria-pressed={sideTab === 'chat'}
-              className={sideTab === 'chat' ? 'active' : ''}
-              onClick={() => setSideTab('chat')}
-            >
-              <ChatCircleText size={16} />
-              共学
+              <small>
+                {data.state.preferences.codexEffort || '默认强度'} · Fast{' '}
+                {data.state.preferences.codexFast ? '开' : '关'}
+              </small>
             </button>
-            <button
-              aria-pressed={sideTab === 'note'}
-              className={sideTab === 'note' ? 'active' : ''}
-              onClick={() => setSideTab('note')}
-            >
-              <NotePencil size={16} />
-              随手记
-            </button>
-          </div>
-          {tab === 'recall' && !feedback && !assisted ? (
-            <div className="tutor-welcome recall-cover">
-              <BookOpen size={28} weight="duotone" />
-              <h3>先给记忆一点空间。</h3>
-              <p>提交解释后，再查看旧对话和笔记。如果现在需要提示，也可以如实记录。</p>
-              <button className="outline-button" onClick={() => setAssisted(true)}>
-                查看提示与旧对话
+            <div className="side-tabs" role="group" aria-label="学习助手">
+              <button
+                aria-pressed={sideTab === 'chat'}
+                className={sideTab === 'chat' ? 'active' : ''}
+                onClick={() => setSideTab('chat')}
+              >
+                <ChatCircleText size={16} />
+                共学
+              </button>
+              <button
+                aria-pressed={sideTab === 'note'}
+                className={sideTab === 'note' ? 'active' : ''}
+                onClick={() => setSideTab('note')}
+              >
+                <NotePencil size={16} />
+                随手记
               </button>
             </div>
-          ) : sideTab === 'chat' ? (
-            <>
-              <div className="chat-messages">
-                {!messages.length && (
-                  <div className="tutor-welcome">
-                    <Sparkle size={28} weight="duotone" />
-                    <h3>哪里不明白，就从哪里开始。</h3>
-                    <p>可以问概念、请我画图，或把你的解释交给我看看。</p>
-                    <div className="tutor-actions">
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          void ask('先问我一个简短问题，了解我对这一节的基础。等我回答后，再针对缺口讲解。')
-                        }
-                      >
-                        <ChatCircleText size={16} />
-                        从我的基础讲起
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          void ask(
-                            '请用一个 Mermaid flowchart 图解这一节最核心的关系，节点不超过 7 个，并给一个简短例子。',
-                          )
-                        }
-                      >
-                        <TreeStructure size={16} />
-                        画清楚概念关系
-                      </button>
-                    </div>
-                  </div>
+            {tab === 'recall' && !feedback && !assisted ? (
+              <div className="tutor-welcome recall-cover">
+                <BookOpen size={28} weight="duotone" />
+                <h3>先给记忆一点空间。</h3>
+                <p>提交解释后，再查看旧对话和笔记。如果现在需要提示，也可以如实记录。</p>
+                <button className="outline-button" onClick={() => setAssisted(true)}>
+                  查看提示与旧对话
+                </button>
+              </div>
+            ) : sideTab === 'chat' ? (
+              <>
+                {newChat && (
+                  <button
+                    className="quiet"
+                    onClick={() => {
+                      if (chatPane.current) chatPane.current.scrollTop = chatPane.current.scrollHeight;
+                      chatAtEnd.current = true;
+                      setNewChat(false);
+                    }}
+                  >
+                    有新内容 · 回到最新
+                  </button>
                 )}
-                {messages.map((m, i) => (
-                  <div className={`chat-message ${m.role}`} key={i}>
-                    <span className="message-author">{m.role === 'user' ? '我' : 'Codex'}</span>
-                    <Markdown>{m.content}</Markdown>
-                    {m.role === 'assistant' && (
+                <div
+                  className="chat-messages"
+                  ref={chatPane}
+                  onScroll={(e) => {
+                    const p = e.currentTarget;
+                    chatAtEnd.current = p.scrollHeight - p.scrollTop - p.clientHeight < 64;
+                  }}
+                >
+                  {!messages.length && (
+                    <div className="tutor-welcome">
+                      <Sparkle size={28} weight="duotone" />
+                      <h3>哪里不明白，就从哪里开始。</h3>
+                      <p>可以问概念、请我画图，或把你的解释交给我看看。</p>
+                      <div className="tutor-actions">
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            void ask('先问我一个简短问题，了解我对这一节的基础。等我回答后，再针对缺口讲解。')
+                          }
+                        >
+                          <ChatCircleText size={16} />
+                          从我的基础讲起
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() =>
+                            void ask(
+                              '请用一个 Mermaid flowchart 图解这一节最核心的关系，节点不超过 7 个，并给一个简短例子。',
+                            )
+                          }
+                        >
+                          <TreeStructure size={16} />
+                          画清楚概念关系
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {messages.map((m, i) => (
+                    <div className={`chat-message ${m.role}`} key={i}>
+                      <span className="message-author">{m.role === 'user' ? '我' : 'Codex'}</span>
+                      <Markdown>{m.content}</Markdown>
+                      {m.role === 'assistant' && (
+                        <button
+                          className="save-response"
+                          disabled={saving}
+                          onClick={() => void saveNote(m.content, 'note')}
+                        >
+                          <NotePencil size={14} />
+                          收进笔记
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {busy && (
+                    <div className="thinking" role="status">
+                      <CircleNotch className="spin" size={17} />
+                      Codex 正在组织讲解…
+                    </div>
+                  )}
+                </div>
+                <div className="chat-composer">
+                  {quotePreview}
+                  <label className="sr-only" htmlFor="chat-question">
+                    共学问题
+                  </label>
+                  <textarea
+                    id="chat-question"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="哪里卡住了？说说你的想法…"
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        void ask();
+                      }
+                    }}
+                  />
+                  <div className="composer-bottom">
+                    <span>⌘ / Ctrl + Enter</span>
+                    {busy ? (
+                      <button className="quiet" onClick={() => abort.current?.abort()}>
+                        停止
+                      </button>
+                    ) : (
                       <button
-                        className="save-response"
-                        disabled={saving}
-                        onClick={() => void saveNote(m.content, 'note')}
+                        aria-label="发送问题"
+                        className="send-button"
+                        disabled={!message.trim() || checking}
+                        onClick={() => void ask()}
                       >
-                        <NotePencil size={14} />
-                        收进笔记
+                        <PaperPlaneTilt size={19} />
                       </button>
                     )}
                   </div>
-                ))}
-                {busy && (
-                  <div className="thinking" role="status">
-                    <CircleNotch className="spin" size={17} />
-                    Codex 正在组织讲解…
-                  </div>
-                )}
-                <div ref={chatEnd} />
-              </div>
-              <div className="chat-composer">
+                </div>
+              </>
+            ) : (
+              <div className="inline-notes">
+                <h3>先记下来，不用一次想透。</h3>
                 {quotePreview}
-                <label className="sr-only" htmlFor="chat-question">
-                  共学问题
-                </label>
-                <textarea
-                  id="chat-question"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="哪里卡住了？说说你的想法…"
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                      e.preventDefault();
-                      void ask();
-                    }
-                  }}
+                <Segmented
+                  label="随手记类型"
+                  value={kind}
+                  onChange={setKind}
+                  disabled={saving}
+                  options={[
+                    { value: 'question', label: '留个疑问' },
+                    { value: 'note', label: '记下理解' },
+                  ]}
                 />
-                <div className="composer-bottom">
-                  <span>⌘ / Ctrl + Enter</span>
-                  {busy ? (
-                    <button className="quiet" onClick={() => abort.current?.abort()}>
-                      停止
-                    </button>
-                  ) : (
-                    <button
-                      aria-label="发送问题"
-                      className="send-button"
-                      disabled={!message.trim() || checking}
-                      onClick={() => void ask()}
-                    >
-                      <PaperPlaneTilt size={19} />
-                    </button>
-                  )}
+                <label>
+                  内容
+                  <textarea
+                    id="personal-note"
+                    rows={6}
+                    value={note}
+                    disabled={saving}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="哪句话没理解？或者你刚刚想通了什么？"
+                  />
+                </label>
+                <button
+                  className="primary wide"
+                  disabled={(!note.trim() && !quote) || saving}
+                  onClick={() => void saveNote(note, kind, true)}
+                >
+                  {saving ? '正在保存…' : '保存到笔记本'}
+                </button>
+                <div className="lesson-notes">
+                  {data.state.notes
+                    .filter((n) => n.courseId === course.id && n.lessonId === lesson.id)
+                    .map((n) => (
+                      <div key={n.id}>
+                        <span className="badge">{n.kind === 'question' ? '疑问' : '笔记'}</span>
+                        <Markdown>{n.content}</Markdown>
+                        <DeleteNote note={n} update={update} toast={toast} />
+                      </div>
+                    ))}
                 </div>
               </div>
-            </>
-          ) : (
-            <div className="inline-notes">
-              <h3>先记下来，不用一次想透。</h3>
-              {quotePreview}
-              <Segmented
-                label="随手记类型"
-                value={kind}
-                onChange={setKind}
-                disabled={saving}
-                options={[
-                  { value: 'question', label: '留个疑问' },
-                  { value: 'note', label: '记下理解' },
-                ]}
-              />
-              <label>
-                内容
-                <textarea
-                  id="personal-note"
-                  rows={6}
-                  value={note}
-                  disabled={saving}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="哪句话没理解？或者你刚刚想通了什么？"
-                />
-              </label>
-              <button
-                className="primary wide"
-                disabled={(!note.trim() && !quote) || saving}
-                onClick={() => void saveNote(note, kind, true)}
-              >
-                {saving ? '正在保存…' : '保存到笔记本'}
-              </button>
-              <div className="lesson-notes">
-                {data.state.notes
-                  .filter((n) => n.courseId === course.id && n.lessonId === lesson.id)
-                  .map((n) => (
-                    <div key={n.id}>
-                      <span className="badge">{n.kind === 'question' ? '疑问' : '笔记'}</span>
-                      <Markdown>{n.content}</Markdown>
-                      <DeleteNote note={n} update={update} toast={toast} />
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-        </aside>
+            )}
+          </aside>
+        </Modal>
       </div>
+      <Modal
+        title="本节已学完"
+        description="已记录学习足迹。你可以检验理解，也可以按自己的节奏结束。"
+        open={completionActions}
+        onOpenChange={setCompletionActions}
+      >
+        <div className="form-stack">
+          <button
+            className="primary"
+            onClick={() => {
+              setCompletionActions(false);
+              setTab('recall');
+            }}
+          >
+            开始主动回忆
+          </button>
+          {next && (
+            <button className="outline-button" onClick={() => navigate(`/learn/${course.id}/${next.id}`)}>
+              进入下一小节
+            </button>
+          )}
+          <button className="quiet" onClick={() => navigate('/today')}>
+            今天先到这里
+          </button>
+        </div>
+      </Modal>
       <Modal
         title="本次学习的请求设置"
         description="保存后用于下一次讲解、答案核对和总结请求。"

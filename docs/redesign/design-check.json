@@ -1,0 +1,246 @@
+{
+  "frames": [
+    {
+      "id": "Z2EiR",
+      "name": "A2 已选定 · 设计系统"
+    },
+    {
+      "id": "E8NHI",
+      "name": "A2 · 纸白 / 今日"
+    },
+    {
+      "id": "aEVDF",
+      "name": "A2 · 纸白 / 书架 · Sitor 层级参考"
+    },
+    {
+      "id": "r9AeZG",
+      "name": "A2 全站 · 认识 AI Agent"
+    },
+    {
+      "id": "v5lH0",
+      "name": "A2 全站 · 知识路线"
+    },
+    {
+      "id": "oAZvM",
+      "name": "A2 全站 · 首次进入带学"
+    },
+    {
+      "id": "unt3e",
+      "name": "A2 · 纸白 / 导师带学"
+    },
+    {
+      "id": "s697kf",
+      "name": "A2 全站 · 导师反馈与追问"
+    },
+    {
+      "id": "O7uEVd",
+      "name": "A2 全站 · 实作与迁移"
+    },
+    {
+      "id": "F2MdV",
+      "name": "A2 · 纸白 / 自主阅读"
+    },
+    {
+      "id": "AtYId",
+      "name": "A2 全站 · 阅读中的提问与笔记"
+    },
+    {
+      "id": "Kw2pB",
+      "name": "A2 全站 · 复习"
+    },
+    {
+      "id": "K0Bq7",
+      "name": "A2 全站 · 主动回忆"
+    },
+    {
+      "id": "PlXeF",
+      "name": "A2 全站 · 核对这次回忆"
+    },
+    {
+      "id": "tK8cv",
+      "name": "A2 全站 · 这次回忆，已经留下来了"
+    },
+    {
+      "id": "MrWAA",
+      "name": "A2 全站 · 笔记"
+    },
+    {
+      "id": "u2QGJ",
+      "name": "A2 全站 · 足迹"
+    },
+    {
+      "id": "eXx8C",
+      "name": "A2 全站 · 带学记录"
+    },
+    {
+      "id": "o0B9kN",
+      "name": "A2 全站 · 总结画廊"
+    },
+    {
+      "id": "HXGHZ",
+      "name": "A2 全站 · 设置"
+    },
+    {
+      "id": "Mfuj4",
+      "name": "A2 全站 · 添加主题"
+    },
+    {
+      "id": "eM7ZD",
+      "name": "A2 全站 · 导入学习材料"
+    },
+    {
+      "id": "LUxng",
+      "name": "A2 全站 · 从本地仓库学习"
+    },
+    {
+      "id": "NEBxt",
+      "name": "A2 全站 · 今日"
+    },
+    {
+      "id": "kmPeN",
+      "name": "A2 全站 · 请求状态与恢复"
+    },
+    {
+      "id": "AaOzN",
+      "name": "A2 全站 · 笔记、预览与辅助面板"
+    },
+    {
+      "id": "H18nN",
+      "name": "A2 全站 · 学习收尾与长内容"
+    },
+    {
+      "id": "qVOPE",
+      "name": "A2 全站 · 空状态与筛选"
+    },
+    {
+      "id": "E3eMW",
+      "name": "A2 全站 · 新建与导入的恢复"
+    },
+    {
+      "id": "R1uqs",
+      "name": "A2 全站 · 辅助面板与模型状态"
+    },
+    {
+      "id": "AAxuB",
+      "name": "A2 全站 · 窄屏与导航"
+    },
+    {
+      "id": "NrpFG",
+      "name": "A2 全站 · 窄屏导师带学"
+    },
+    {
+      "id": "hxr2Y",
+      "name": "A2 全站 · 1024px 阅读"
+    },
+    {
+      "id": "IMVi4",
+      "name": "A2 全站 · 深色 / 今日"
+    },
+    {
+      "id": "Qs8jr",
+      "name": "A2 全站 · 深色 / 自主阅读"
+    },
+    {
+      "id": "IUXTr",
+      "name": "A2 全站 · 1024px 导师带学"
+    },
+    {
+      "id": "qpgaZ",
+      "name": "A2 全站 · 深色 / 导师带学"
+    },
+    {
+      "id": "v5EOs",
+      "name": "A2 全站 · 专注阅读"
+    }
+  ],
+  "overflow": [],
+  "intentionalScrollClipping": [
+    {
+      "root": "oAZvM",
+      "id": "FMKKU",
+      "viewport": "PuhPQ",
+      "exceeds": 327
+    },
+    {
+      "root": "unt3e",
+      "id": "YQhc4",
+      "viewport": "JP2dG",
+      "exceeds": 327
+    },
+    {
+      "root": "s697kf",
+      "id": "q3Qzf",
+      "viewport": "wujmM",
+      "exceeds": 327
+    },
+    {
+      "root": "O7uEVd",
+      "id": "IHwnS",
+      "viewport": "Zr0gB",
+      "exceeds": 327
+    },
+    {
+      "root": "F2MdV",
+      "id": "ZTSpZ",
+      "viewport": "ctAPP",
+      "exceeds": 266
+    },
+    {
+      "root": "hxr2Y",
+      "id": "mC0lc",
+      "viewport": "n6fbL",
+      "exceeds": 306
+    },
+    {
+      "root": "Qs8jr",
+      "id": "VCijH",
+      "viewport": "UWBdX",
+      "exceeds": 266
+    },
+    {
+      "root": "IUXTr",
+      "id": "Zj7a0",
+      "viewport": "fmBhK",
+      "exceeds": 479
+    },
+    {
+      "root": "qpgaZ",
+      "id": "kaNPU",
+      "viewport": "u9vTW",
+      "exceeds": 327
+    },
+    {
+      "root": "v5EOs",
+      "id": "EszTf",
+      "viewport": "Dt0yU",
+      "exceeds": 310
+    }
+  ],
+  "clippedRounding": [
+    "CbM5k",
+    "geCck",
+    "iK8Bl",
+    "Urv1e",
+    "M0qqL",
+    "GJL9i"
+  ],
+  "stats": {
+    "texts": 1370,
+    "minContrast": 4.574918098368125
+  },
+  "contrast": [],
+  "date": "2026-10-04",
+  "scope": "Pen static design only",
+  "revision": "density-and-focus",
+  "boundsTolerancePx": 0.5,
+  "roundingNote": "6 rounding flags remain below 0.5px.",
+  "scrollNote": "Ten explicitly clipped reading viewports contain long chapter content; these represent intended scrolling, not accidental overflow.",
+  "unverified": [
+    "real browser scrolling",
+    "focus mode restore behavior",
+    "keyboard and focus behavior",
+    "live service recovery",
+    "actual persistence and drafts",
+    "runtime responsive layout"
+  ]
+}

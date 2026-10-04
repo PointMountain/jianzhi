@@ -9,6 +9,7 @@ export interface Lesson {
 }
 export interface Course {
   id: string;
+  creationRequest?: { id: string; fingerprint: string };
   title: string;
   description: string;
   goal: string;
@@ -48,6 +49,7 @@ export interface Progress {
 }
 export interface Review {
   id: string;
+  creationRequest?: { id: string; fingerprint: string };
   courseId: string;
   lessonId: string;
   answer: string;
@@ -60,6 +62,7 @@ export interface Review {
 }
 export interface Note {
   id: string;
+  creationRequest?: { id: string; fingerprint: string };
   courseId: string;
   lessonId?: string;
   kind: 'note' | 'question';
@@ -84,6 +87,7 @@ export interface SummaryCard {
 }
 export interface StudyState {
   version: 1;
+  revision?: number;
   courses: Course[];
   progress: Record<string, Progress>;
   reviews: Review[];
