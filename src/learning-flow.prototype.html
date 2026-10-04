@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>渐知 · 学习连续性原型</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f8f7f3;color:#302f2c;font:16px/1.7 system-ui}main{max-width:1120px;margin:auto;padding:32px}h1,h2{font-family:"Songti SC",serif}button,textarea{font:inherit}button{min-height:44px;border:1px solid #dfded7;border-radius:8px;background:white;color:inherit;padding:8px 14px;cursor:pointer}button[aria-selected=true],button[aria-pressed=true]{background:#eae5da}button:focus-visible,textarea:focus-visible{outline:2px solid #302f2c;outline-offset:3px}section{background:white;border:1px solid #dfded7;border-radius:12px;padding:20px;margin:16px 0}.row{display:flex;flex-wrap:wrap;gap:8px}dl{display:grid;grid-template-columns:150px 1fr;gap:8px}dt{color:#68665f}dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}textarea{width:100%;padding:12px;border:1px solid #dfded7;border-radius:8px}small{color:#68665f}.columns{display:grid;grid-template-columns:1fr 1fr;gap:20px}.pane{height:260px;overflow:auto;border:1px solid #dfded7;padding:16px}body.focus .tutor{display:none}body.focus .columns{grid-template-columns:1fr}[hidden]{display:none!important}@media(max-width:650px){main{padding:18px}.columns{grid-template-columns:1fr}dl{grid-template-columns:110px 1fr}}
+</style>
+<main><small>可丢弃原型 · 示例仅存于内存 · 刷新重置</small><h1>切换视图，学习还能接得上吗？</h1>
+<p>验证按小节恢复模式和草稿、专注阅读不改变带学阶段、旧回复不能覆盖新小节，以及主动回忆查看材料后不能标记独立解释。演示不连接真实导师或学习空间。</p>
+<section><h2>当前状态</h2><dl id="state" aria-live="polite"></dl></section>
+<section><h2>自由尝试</h2><div class="row" id="actions"></div>
+<label>当前小节的回答草稿<textarea id="draft" rows="3"></textarea></label>
+<div class="columns"><div><h3>原文</h3><div class="pane" id="material" tabindex="0"></div></div><div class="tutor"><h3>导师</h3><div class="pane" id="tutor" tabindex="0"></div></div></div></section>
+<section><h2>引导场景</h2><div class="row" role="tablist" aria-label="引导场景" id="scenarios"></div><p id="description"></p><div class="row" id="steps"></div></section></main>
+<script>
+const fresh=()=>({lesson:'A',view:'normal',sections:{A:{mode:'guided',draft:'',assisted:false,completed:false},B:{mode:'guided',draft:'',assisted:false,completed:false}},pending:null,notice:'尚未开始',reply:0});
+function reduce(state,action){
+ const s=structuredClone(state), current=s.sections[s.lesson];
+ switch(action.type){
+ case 'draft':current.draft=action.value;break;
+ case 'read':case 'guided':current.mode=action.type;s.view='normal';break;
+ case 'recall':current.mode='recall';s.view='normal';break;
+ case 'focus':s.view=s.view==='focus'?'normal':'focus';if(current.mode==='recall')current.assisted=true;break;
+ case 'next':s.lesson=s.lesson==='A'?'B':'A';s.view='normal';break;
+ case 'request':if(!s.pending)s.pending=s.lesson;break;
+ case 'reply':if(s.pending){s.notice=s.pending===s.lesson?'有新内容；阅读位置不变':'旧小节的结果已隔离';s.reply++;s.pending=null}break;
+ case 'good':s.notice=current.assisted?'已使用材料，只能记录提示后能解释':'已记录独立解释';break;
+ case 'complete':current.completed=true;s.notice='已学完，不增加掌握证据';break;
+ }return s;
+}
+const actions=[['guided','导师带学'],['read','自主阅读'],['recall','主动回忆'],['focus','切换专注阅读'],['next','切换小节'],['request','模拟开始请求'],['reply','模拟收到回复'],['good','尝试独立解释'],['complete','学完本节']];
+const scenarios=[
+ ['切换与恢复','草稿按小节保存。专注阅读不改变模式；退出后保留原问题。',[['draft','写入草稿','我先用自己的话解释。'],['focus','进入专注'],['focus','退出专注'],['read','切换阅读'],['next','进入小节 B'],['next','返回小节 A']]],
+ ['请求竞态','请求绑定发起小节。切换后收到的旧回复不覆盖当前小节。',[['request','从 A 发起请求'],['next','切到 B'],['reply','A 的回复到达']]],
+ ['回忆证据','主动回忆中查看材料必须留下提示记录；完成与掌握仍然独立。',[['recall','开始回忆'],['focus','查看原文'],['focus','返回问题'],['good','尝试独立解释'],['complete','学完本节']]]
+];
+let state=fresh(),scenario=0,step=0;
+const positions={A:{material:0,tutor:0},B:{material:0,tutor:0}};
+const material=document.querySelector('#material'), tutor=document.querySelector('#tutor');
+material.innerHTML=Array.from({length:12},(_,i)=>`<h4>段落 ${i+1}</h4><p>学习从材料出发：先说清一个概念，再用例子检验自己的理解。原文与导师各自滚动，查看资料不会丢失当前回答。</p>`).join('');
+tutor.innerHTML=Array.from({length:8},(_,i)=>`<p>问题 ${i+1}：请用自己的例子解释这段材料。</p>`).join('');
+for(const [type,label] of actions){const b=document.createElement('button');b.textContent=label;b.dataset.action=type;b.onclick=()=>dispatch({type});document.querySelector('#actions').append(b)}
+document.querySelector('#draft').oninput=e=>dispatch({type:'draft',value:e.target.value});
+function dispatch(action){
+ const previous=state.lesson;positions[previous]={material:material.scrollTop,tutor:tutor.scrollTop};state=reduce(state,action);render();
+ material.scrollTop=positions[state.lesson].material;tutor.scrollTop=positions[state.lesson].tutor;
+}
+function render(){
+ const c=state.sections[state.lesson];document.body.classList.toggle('focus',state.view==='focus');
+ document.querySelector('#draft').value=c.draft;
+ const fields={'当前小节':state.lesson,'学习模式':({guided:'导师带学',read:'自主阅读',recall:'主动回忆'})[c.mode],'显示状态':state.view==='focus'?'专注阅读':'常规','本节草稿':c.draft||'空','其他小节草稿':state.sections[state.lesson==='A'?'B':'A'].draft||'空','提示证据':c.assisted?'已查看材料':'未使用提示','已学完':c.completed?'是':'否','请求所属小节':state.pending||'无','最近结果':state.notice};
+ const panel=document.querySelector('#state');panel.replaceChildren();for(const [name,value] of Object.entries(fields)){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=value;panel.append(dt,dd)}
+ document.querySelector('#scenarios').replaceChildren();scenarios.forEach(([label],i)=>{const b=document.createElement('button');b.role='tab';b.setAttribute('aria-selected',String(i===scenario));b.textContent=label;b.onclick=()=>{state=fresh();scenario=i;step=0;render()};document.querySelector('#scenarios').append(b)});
+ document.querySelector('#description').textContent=scenarios[scenario][1];document.querySelector('#steps').replaceChildren();
+ scenarios[scenario][2].forEach(([type,label,value],i)=>{const b=document.createElement('button');b.textContent=`${i+1}. ${label}`;b.disabled=i!==step;b.onclick=()=>{step++;dispatch({type,value})};document.querySelector('#steps').append(b)});
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.view==='focus')dispatch({type:'focus'})});render();
+</script></html>
