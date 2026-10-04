@@ -431,6 +431,7 @@
   .learning-shell {
     background: var(--bg);
     height: 100dvh;
+    min-height: 0;
     padding: 12px 24px 16px;
     gap: 12px;
   }
@@ -460,9 +461,11 @@
   .learning-layout {
     display: block;
     min-height: 0;
+    overflow: hidden;
   }
   .lesson-main {
     height: 100%;
+    min-height: 0;
     overflow: hidden;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -554,18 +557,8 @@
     padding: 20px;
     overflow: auto;
     overscroll-behavior: contain;
-  }
-  .guided-panel.has-question {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .guided-panel.has-question > * {
-    flex-shrink: 0;
-  }
-  .guided-panel.has-question .guided-conversation {
-    flex: 1 1 120px;
-    min-height: 60px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
   }
   .guided-panel.has-question .guided-navigation {
     display: none;
@@ -588,20 +581,35 @@
   .guided-heading .quiet {
     font-size: 12px;
   }
+  .guided-heading h1 {
+    margin: 0;
+  }
+  .guided-tools {
+    display: flex;
+    gap: 4px;
+  }
   .guided-meta {
-    margin: 8px 0;
+    margin: 0 0 12px;
+    justify-content: space-between;
+    min-height: 32px;
   }
   .guided-turn {
     padding: 12px 0;
     margin: 0;
   }
   .guided-conversation {
-    max-height: 26dvh;
-    overflow: auto;
-    overscroll-behavior: contain;
+    overflow: visible;
+  }
+  .guided-conversation .guided-turn,
+  .guided-conversation .guided-response {
+    padding: 0;
+    background: none;
+  }
+  .guided-conversation .guided-response > .markdown > :first-child {
+    margin-top: 0;
   }
   .guided-history-toggle {
-    display: none;
+    font-size: 12px;
   }
   .guided-response {
     background: var(--soft);
@@ -619,17 +627,16 @@
   }
   .guided-composer {
     position: static;
-    padding: 16px 0 20px;
+    margin-top: 20px;
+    padding: 20px 0 0;
     background: var(--panel);
     border-top: 1px solid var(--line);
   }
   .guided-composer .current-question {
-    margin-bottom: 12px;
-    max-height: 110px;
-    overflow: auto;
+    margin: 0 0 16px;
   }
   .guided-composer textarea {
-    min-height: 96px;
+    min-height: 88px;
     max-height: 220px;
   }
   .guided-actions {
@@ -639,7 +646,25 @@
   .guided-actions button {
     font-size: 12px;
   }
-  .guided-next,
+  .guided-panel .guided-next {
+    margin-top: 16px;
+    padding: 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+  }
+  .guided-next .disclosure-trigger {
+    padding: 12px 0;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .guided-next .disclosure-content:not([hidden]) {
+    padding: 4px 0 0;
+    border: 0;
+  }
+  .guided-next .button-row {
+    margin-top: 12px;
+  }
   .guided-navigation {
     padding-top: 16px;
   }
@@ -667,25 +692,118 @@
     outline: 2px solid var(--accent);
     background: var(--accent-soft);
   }
+  .assistant-dialog {
+    width: min(680px, calc(100vw - 32px));
+  }
+  .assistant-dialog .modal-header {
+    padding: 20px 64px 16px 24px;
+  }
+  .assistant-dialog .modal-header h2 {
+    font-size: 23px;
+  }
+  .assistant-dialog .modal-header p {
+    margin-top: 4px;
+    font-size: 13px;
+  }
+  .assistant-dialog .modal-body {
+    display: flex;
+    min-height: 0;
+    padding: 0 24px 20px;
+    overflow: hidden;
+  }
   .tutor-panel {
     display: flex;
     position: static;
     border: 0;
     width: 100%;
-    height: min(660px, 65dvh);
-    min-height: 320px;
+    height: auto;
+    min-height: 0;
     background: var(--panel);
   }
+  .assistant-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    gap: 4px 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .assistant-toolbar .side-tabs {
+    padding: 0;
+    gap: 4px;
+    border: 0;
+  }
+  .assistant-toolbar .model-shortcut {
+    min-height: 44px;
+    margin: 0;
+    padding: 8px;
+    border: 0;
+    background: none;
+    font-size: 12px;
+  }
+  .assistant-toolbar .model-shortcut small {
+    font-size: 12px;
+  }
   .chat-messages {
-    min-height: 100px;
-    flex: 1;
+    min-height: 0;
+    max-height: 45dvh;
+    flex: 0 1 auto;
     overflow: auto;
+    padding: 16px 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+  .chat-messages.is-empty {
+    flex-shrink: 0;
+    max-height: none;
+    overflow: visible;
+  }
+  .tutor-welcome {
+    padding: 0;
+  }
+  .tutor-welcome p {
+    margin: 0 0 12px;
+  }
+  .tutor-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chat-composer {
+    margin: 0;
+  }
+  .chat-composer textarea {
+    display: block;
+    min-height: 72px;
+    padding: 12px;
+    font-size: 14px;
+  }
+  .composer-bottom {
+    padding: 0 8px 8px 12px;
+  }
+  .assistant-dialog .quote-preview {
+    align-items: center;
+    padding: 4px 8px 4px 12px;
+  }
+  .assistant-dialog .quote-preview > span {
+    max-height: none;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+  .quote-full-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.8;
   }
   .inline-notes {
+    min-height: 0;
     overflow: auto;
-  }
-  .model-shortcut {
-    flex-shrink: 0;
+    padding: 16px 0 0;
+    scrollbar-width: thin;
   }
   .material-summary {
     display: none;
@@ -725,22 +843,8 @@
     white-space: nowrap;
   }
   @media (max-width: 1100px) {
-    .guided-history-toggle {
-      display: flex;
-    }
-    .guided-panel .guided-conversation,
-    .guided-panel > .new-content {
-      display: none;
-    }
     .guided-composer .current-question {
       font-size: 19px;
-    }
-    .guided-panel.has-question {
-      gap: 4px;
-    }
-    .guided-heading,
-    .guided-meta {
-      margin: 0;
     }
     .guided-composer {
       padding: 8px 0;
@@ -865,23 +969,8 @@
     .course-resume {
       flex-wrap: wrap;
     }
-    .guided-composer .current-question {
-      max-height: 80px;
-    }
     .guided-composer textarea {
       min-height: 72px;
-    }
-    .guided-meta .small {
-      display: none;
-    }
-    .guided-history-toggle {
-      display: flex;
-    }
-    .guided-panel:not(.history-open) .guided-conversation {
-      display: none;
-    }
-    .guided-panel.history-open .guided-conversation {
-      max-height: 200px;
     }
     .material-summary p {
       display: -webkit-box;
@@ -1009,6 +1098,19 @@
     .create-page .segmented button {
       flex: 1;
       min-width: 92px;
+    }
+  }
+  @media (max-height: 600px) {
+    .assistant-dialog .modal-body {
+      display: block;
+      overflow: auto;
+    }
+    .assistant-dialog .chat-messages {
+      max-height: none;
+      overflow: visible;
+    }
+    .assistant-dialog .inline-notes {
+      overflow: visible;
     }
   }
 }

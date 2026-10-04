@@ -66,6 +66,21 @@ async function run({ url, dataDir, space, output }) {
     await page.goto(fixture.url + '?guided');
     await page.reload(); // The fixture was created through the API after this tab's last bootstrap.
     await page.waitForSelector('.guided-composer textarea');
+    check(
+      'currentQuestionShownOnce',
+      await page.evaluate(() => {
+        const question = document.querySelector('.current-question').textContent;
+        return document.querySelector('.guided-panel').textContent.split(question).length === 2;
+      }),
+    );
+    check(
+      'tutorContentHasNoNestedScroll',
+      await page.evaluate(() =>
+        [...document.querySelectorAll('.guided-conversation, .current-question')].every(
+          (element) => element.scrollHeight <= element.clientHeight + 1,
+        ),
+      ),
+    );
     await page.fill('.guided-composer textarea', '跨视图草稿 A');
     await page.evaluate(() => {
       const p = document.querySelector('.lesson-article');
@@ -92,6 +107,14 @@ async function run({ url, dataDir, space, output }) {
     );
     await page.click('text="自主阅读"');
     await page.click('button[aria-label="展开右侧助手"]');
+    check(
+      'emptyAssistantHasNoClippedContent',
+      await page.evaluate(() => {
+        const chat = document.querySelector('.chat-messages');
+        const body = document.querySelector('.assistant-dialog .modal-body');
+        return chat.scrollHeight <= chat.clientHeight + 1 && body.scrollHeight <= body.clientHeight + 1;
+      }),
+    );
     await page.fill('#chat-question', '未发送的问题 A');
     await page.click('text="随手记"');
     await page.fill('#personal-note', '未保存的笔记 A');

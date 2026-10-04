@@ -16,8 +16,12 @@ async function check({ url, dataDir, space, reportPath }) {
   const task = await taskSpace(space ? Number(space) : '渐知渲染回归检查');
   const page = task.page('p1');
   console.log({ taskSpaceId: task.spaceId });
-  if ((await page.url()) === url) await page.reload();
-  else await page.goto(url);
+  // This check targets rendering, so enter reading directly rather than racing
+  // the saved-mode restoration with a mode-switch click.
+  const readingUrl = new URL(url);
+  readingUrl.hash = readingUrl.hash.split('?')[0] + '?read';
+  if ((await page.url()) === readingUrl.href) await page.reload();
+  else await page.goto(readingUrl.href);
   await page.waitForSelector('.lesson-tabs');
   await page.click('text="自主阅读"');
   await page.waitForSelector('button[aria-label="暂停计时"]');

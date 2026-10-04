@@ -74,6 +74,7 @@ export function Learning({
   const [sideTab, setSideTab] = useState<'chat' | 'note'>('chat');
   const [rightCollapsed, setRightCollapsed] = useState(true);
   const [modelSettings, setModelSettings] = useState(false);
+  const [quoteOpen, setQuoteOpen] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
   const [checking, setChecking] = useState(false);
   const [feedbackError, setFeedbackError] = useState('');
@@ -199,7 +200,7 @@ export function Learning({
     };
   }, []);
   useEffect(() => {
-    if (chatAtEnd.current && !rightCollapsed && chatPane.current)
+    if (messages.length && chatAtEnd.current && !rightCollapsed && chatPane.current)
       chatPane.current.scrollTop = chatPane.current.scrollHeight;
     else if (messages.length) setNewChat(true);
   }, [messages.length, busy, rightCollapsed]);
@@ -341,6 +342,9 @@ export function Learning({
     <div className="quote-preview" aria-label="已引用原文">
       <Quotes size={15} />
       <span>{quote}</span>
+      <button className="quiet" onClick={() => setQuoteOpen(true)}>
+        查看引用
+      </button>
       <button aria-label="移除引用" className="icon-button" onClick={() => setQuote('')}>
         <X size={15} />
       </button>
@@ -787,60 +791,45 @@ export function Learning({
         <Modal
           title="提问与笔记"
           description="关闭面板会保留尚未提交的草稿。"
+          className="assistant-dialog"
           open={!rightCollapsed && !focusReading}
           onOpenChange={(open) => setRightCollapsed(!open)}
         >
           <aside className="tutor-panel" id="tutor-panel" aria-label="学习助手面板">
-            <div className="tutor-heading">
-              <div className="tutor-mark">
-                <Sparkle size={19} />
+            <div className="assistant-toolbar">
+              <div className="side-tabs" role="group" aria-label="学习助手">
+                <button
+                  aria-pressed={sideTab === 'chat'}
+                  className={sideTab === 'chat' ? 'active' : ''}
+                  onClick={() => setSideTab('chat')}
+                >
+                  <ChatCircleText size={16} />
+                  共学
+                </button>
+                <button
+                  aria-pressed={sideTab === 'note'}
+                  className={sideTab === 'note' ? 'active' : ''}
+                  onClick={() => setSideTab('note')}
+                >
+                  <NotePencil size={16} />
+                  随手记
+                </button>
               </div>
-              <div>
-                <strong>一起弄懂</strong>
+              <button
+                className="model-shortcut"
+                onClick={() => setModelSettings(true)}
+                aria-label="快捷设置模型、Effort 和 Fast"
+              >
+                <GearSix size={16} />
                 <span>
-                  Codex ·{' '}
                   {data.state.preferences.codexModel === '@global'
                     ? data.codex.globalModel
-                    : data.state.preferences.codexModel || data.codex.defaultModel || 'CLI 默认'}
+                    : data.state.preferences.codexModel || data.codex.defaultModel || '选择模型'}
                 </span>
-              </div>
-              <span
-                className={`connection-dot ${data.codex.authenticated ? 'connected' : ''}`}
-                title={data.codex.authenticated ? 'Codex 已登录' : 'Codex 未登录'}
-              />
-            </div>
-            <button
-              className="model-shortcut"
-              onClick={() => setModelSettings(true)}
-              aria-label="快捷设置模型、Effort 和 Fast"
-            >
-              <GearSix size={16} />
-              <span>
-                {data.state.preferences.codexModel === '@global'
-                  ? data.codex.globalModel
-                  : data.state.preferences.codexModel || data.codex.defaultModel || '选择模型'}
-              </span>
-              <small>
-                {data.state.preferences.codexEffort || '默认强度'} · Fast{' '}
-                {data.state.preferences.codexFast ? '开' : '关'}
-              </small>
-            </button>
-            <div className="side-tabs" role="group" aria-label="学习助手">
-              <button
-                aria-pressed={sideTab === 'chat'}
-                className={sideTab === 'chat' ? 'active' : ''}
-                onClick={() => setSideTab('chat')}
-              >
-                <ChatCircleText size={16} />
-                共学
-              </button>
-              <button
-                aria-pressed={sideTab === 'note'}
-                className={sideTab === 'note' ? 'active' : ''}
-                onClick={() => setSideTab('note')}
-              >
-                <NotePencil size={16} />
-                随手记
+                <small>
+                  {data.state.preferences.codexEffort || '默认强度'} · Fast{' '}
+                  {data.state.preferences.codexFast ? '开' : '关'}
+                </small>
               </button>
             </div>
             {tab === 'recall' && !feedback && !assisted ? (
@@ -867,7 +856,7 @@ export function Learning({
                   </button>
                 )}
                 <div
-                  className="chat-messages"
+                  className={`chat-messages ${messages.length || busy ? '' : 'is-empty'}`}
                   ref={chatPane}
                   onScroll={(e) => {
                     const p = e.currentTarget;
@@ -876,9 +865,7 @@ export function Learning({
                 >
                   {!messages.length && (
                     <div className="tutor-welcome">
-                      <Sparkle size={28} weight="duotone" />
-                      <h3>哪里不明白，就从哪里开始。</h3>
-                      <p>可以问概念、请我画图，或把你的解释交给我看看。</p>
+                      <p>写下问题，或选一个方式开始。</p>
                       <div className="tutor-actions">
                         <button
                           disabled={busy}
@@ -933,6 +920,7 @@ export function Learning({
                   </label>
                   <textarea
                     id="chat-question"
+                    rows={2}
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     placeholder="哪里卡住了？说说你的想法…"
@@ -1010,6 +998,14 @@ export function Learning({
           </aside>
         </Modal>
       </div>
+      <Modal
+        title="引用原文"
+        description="这段内容会随问题或笔记一起保存。"
+        open={quoteOpen}
+        onOpenChange={setQuoteOpen}
+      >
+        <p className="quote-full-text">{quote}</p>
+      </Modal>
       <Modal
         title="本节已学完"
         description="已记录学习足迹。你可以检验理解，也可以按自己的节奏结束。"

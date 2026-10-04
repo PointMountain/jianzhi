@@ -33,12 +33,20 @@ import {
   legacyLessonValue,
 } from './learning-state';
 
-export function GuidedTurnView({ turn, onMaterial }: { turn: GuidedTurn; onMaterial?: () => void }) {
+export function GuidedTurnView({
+  turn,
+  onMaterial,
+  current = false,
+}: {
+  turn: GuidedTurn;
+  onMaterial?: () => void;
+  current?: boolean;
+}) {
   if (turn.action === 'material') return null;
   const step = turn.response;
   return (
     <article className="guided-turn">
-      {turn.action !== 'start' && (
+      {!current && turn.action !== 'start' && (
         <div className="guided-submission">
           <span className="badge">{actionLabels[turn.action]}</span>
           {turn.content && <Markdown>{turn.content}</Markdown>}
@@ -53,7 +61,7 @@ export function GuidedTurnView({ turn, onMaterial }: { turn: GuidedTurn; onMater
       )}
       {step && (
         <div className="guided-response">
-          <span className="eyebrow">{stepLabels[step.kind]}</span>
+          {!current && <span className="eyebrow">{stepLabels[step.kind]}</span>}
           <Markdown>{step.message}</Markdown>
           {step.assessment && (
             <div className="guided-assessment">
@@ -84,7 +92,7 @@ export function GuidedTurnView({ turn, onMaterial }: { turn: GuidedTurn; onMater
               )}
             </div>
           )}
-          {step.question && (
+          {!current && step.question && (
             <div className="guided-question">
               <Markdown>{step.question}</Markdown>
             </div>
@@ -212,6 +220,7 @@ export function GuidedLearning({
   const session = sessions.at(-1);
   const current = session && currentQuestion(session);
   const last = session?.turns.filter((t) => t.action !== 'material').at(-1);
+  const latestResponse = session?.turns.filter((t) => t.status === 'complete' && t.response).at(-1);
   const pending = session?.turns.some((t) => t.status === 'pending');
   const failed = session?.turns.find((t) => t.status === 'error');
   const viewKey = lessonStateKey(data.storagePath, course.id, lesson.id);
@@ -235,6 +244,7 @@ export function GuidedLearning({
     latest = useRef(data);
   const panel = useRef<HTMLElement>(null);
   const conversation = useRef<HTMLDivElement>(null);
+  const answerInput = useRef<HTMLTextAreaElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [hasNew, setHasNew] = useState(false);
   const seenTurn = useRef(last?.id);
@@ -261,9 +271,7 @@ export function GuidedLearning({
   }, []);
   useLayoutEffect(() => {
     if (active && panel.current) panel.current.scrollTop = readLocal(viewKey + ':guided-scroll', 0);
-    if (active && conversation.current)
-      conversation.current.scrollTop = readLocal(viewKey + ':history-scroll', 0);
-  }, [active, viewKey, historyOpen]);
+  }, [active, viewKey]);
   useEffect(() => {
     if (!session || !active) return;
     let stopped = false;
@@ -379,10 +387,20 @@ export function GuidedLearning({
         <div>
           <h1>导师带学</h1>
         </div>
-        <button className="quiet" onClick={openSettings}>
-          <GearSix size={18} />
-          学习设置
-        </button>
+        <div className="guided-tools">
+          {current && !session?.endedAt && (
+            <button
+              className="quiet"
+              disabled={blocked || !!failed}
+              onClick={() => answerInput.current?.focus()}
+            >
+              去作答
+            </button>
+          )}
+          <button className="quiet" onClick={openSettings} aria-label="学习设置" title="学习设置">
+            <GearSix size={18} />
+          </button>
+        </div>
       </div>
       {error && (
         <p className="error" role="alert">
@@ -427,46 +445,29 @@ export function GuidedLearning({
                     ? '变式验证'
                     : '逐层理解'}
             </span>
-            <span className="small muted">{formatDay(session.createdAt)} · 提交自动保存</span>
-          </div>
-          <button
-            className="quiet guided-history-toggle"
-            onClick={() => {
-              setHistoryOpen(true);
-              setHasNew(false);
-            }}
-          >
-            {hasNew ? '有新内容 · 查看最新' : '查看此前讨论与反馈'}
-          </button>
-          <div
-            className="guided-conversation"
-            ref={conversation}
-            onScroll={(e) => {
-              if (e.currentTarget.clientHeight)
-                writeLocal(viewKey + ':history-scroll', e.currentTarget.scrollTop);
-            }}
-          >
-            {session.turns.map((turn) => (
-              <GuidedTurnView
-                key={turn.id}
-                turn={turn}
-                onMaterial={session.endedAt ? undefined : onMaterial}
-              />
-            ))}
+            {(session.endedAt || session.turns.filter((turn) => turn.response).length > 1) && (
+              <button className="quiet guided-history-toggle" onClick={() => setHistoryOpen(true)}>
+                查看完整讨论
+              </button>
+            )}
           </div>
           {hasNew && (
             <button
               className="new-content quiet"
               onClick={() => {
                 requestAnimationFrame(() => {
-                  if (conversation.current)
-                    conversation.current.scrollTop = conversation.current.scrollHeight;
+                  conversation.current?.scrollIntoView({ block: 'start' });
                 });
                 setHasNew(false);
               }}
             >
               有新内容 · 回到最新
             </button>
+          )}
+          {!session.endedAt && latestResponse && (
+            <div className="guided-conversation" ref={conversation}>
+              <GuidedTurnView turn={latestResponse} current onMaterial={onMaterial} />
+            </div>
           )}
           {blocked && (
             <div className="thinking" role="status">
@@ -494,7 +495,7 @@ export function GuidedLearning({
               {current && (
                 <div className="guided-composer">
                   {current.response?.question && (
-                    <p className="current-question" tabIndex={0} aria-label="当前问题">
+                    <p className="current-question" aria-label="当前问题">
                       {current.response.question}
                     </p>
                   )}
@@ -503,6 +504,7 @@ export function GuidedLearning({
                       ? '提交核心实现、运行结果和你的设计理由'
                       : '说说你的判断和理由'}
                     <textarea
+                      ref={answerInput}
                       rows={3}
                       maxLength={20000}
                       value={draft}
@@ -546,7 +548,7 @@ export function GuidedLearning({
                   </div>
                 </div>
               )}
-              <Disclosure className="guided-next" title="后续学习：变式、实作与整理">
+              <Disclosure className="guided-next" title="换个方式继续">
                 <p className="small muted">
                   {checkpoint
                     ? '本章到了一个节点，可以用小实作组合应用。'
@@ -609,7 +611,7 @@ export function GuidedLearning({
         </>
       )}
       <Modal
-        title="此前讨论与反馈"
+        title="完整讨论与反馈"
         description="关闭后回到同一道问题和回答草稿。"
         open={historyOpen}
         onOpenChange={setHistoryOpen}

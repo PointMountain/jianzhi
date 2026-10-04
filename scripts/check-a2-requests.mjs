@@ -32,7 +32,6 @@ async function check({ url, dataDir, space, output }) {
     await fs.writeFile(mode, 'slow');
     await page.evaluate(() => {
       document.querySelector('.lesson-article').scrollTop = 420;
-      document.querySelector('.guided-conversation').scrollTop = 0;
     });
     await page.click('loc=role:button[name="给一点提示"]');
     await page.waitForSelector('.guided-panel .thinking');
@@ -45,9 +44,7 @@ async function check({ url, dataDir, space, output }) {
     );
     await page.click('#exit-reading-focus');
     result.newReplyDoesNotMoveReading = await page.evaluate(
-      () =>
-        document.querySelector('.lesson-article').scrollTop === 420 &&
-        document.querySelector('.guided-conversation').scrollTop === 0,
+      () => document.querySelector('.lesson-article').scrollTop === 420,
     );
     await page.fill('.guided-composer textarea', '停止后保留这份草稿');
     await page.click('loc=role:button[name="给一点提示"]');
@@ -68,7 +65,7 @@ async function check({ url, dataDir, space, output }) {
     await page.waitForSelector('.guided-panel .thinking');
     await page.click('text="章节"');
     await page.click('[role="dialog"] .outline-chapter button:nth-of-type(2)');
-    await page.click('text="导师带学"');
+    await page.click('loc=role:button[name="导师带学"]');
     await page.waitForSelector('.guided-intro');
     const state = await page.fetch('/api/bootstrap').then((r) => JSON.parse(r.body));
     result.lessonSwitchCancelsOldRequest = !state.state.guidedSessions.some(
