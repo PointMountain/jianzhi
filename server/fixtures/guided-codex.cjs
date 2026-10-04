@@ -34,11 +34,27 @@ if (process.argv.includes('app-server')) {
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (part) => (prompt += part));
   process.stdin.on('end', () => {
-    const data = JSON.parse(prompt.split('\n学习数据：').at(-1));
     const mode =
       process.env.GUIDED_FIXTURE_MODE && fs.existsSync(process.env.GUIDED_FIXTURE_MODE)
         ? fs.readFileSync(process.env.GUIDED_FIXTURE_MODE, 'utf8')
         : '';
+    if (!prompt.includes('\n学习数据：')) {
+      if (mode === 'chat-error') {
+        console.error('Fixture request failed');
+        process.exit(1);
+      }
+      const text =
+        'AI Agent 会围绕目标选择工具、执行动作，并根据结果决定下一步。\n\n' +
+        '普通问答主要生成回答；Agent 还需要观察行动结果、处理错误，并判断任务是否完成。可以从你熟悉的前端事件循环来理解这一区别。\n\n'.repeat(
+          mode === 'chat-slow' ? 12 : 1,
+        );
+      setTimeout(
+        () => console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text } })),
+        mode === 'chat-slow' ? 3000 : 10,
+      );
+      return;
+    }
+    const data = JSON.parse(prompt.split('\n学习数据：').at(-1));
     if (process.env.GUIDED_FIXTURE_TRACE)
       fs.appendFileSync(process.env.GUIDED_FIXTURE_TRACE, JSON.stringify(data) + '\n');
     let kind = data.allowedKinds[0];

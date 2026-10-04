@@ -2352,40 +2352,6 @@
   .save-response:hover {
     color: var(--accent);
   }
-  .chat-composer {
-    margin: 14px 16px 18px;
-    border: 1px solid var(--line);
-    background: var(--panel);
-    border-radius: 11px;
-    flex-shrink: 0;
-    overflow: hidden;
-  }
-  .chat-composer textarea {
-    border: 0;
-    background: transparent;
-    padding: 13px;
-    min-height: 85px;
-    max-height: 160px;
-    font-size: 12px;
-    resize: vertical;
-  }
-  .composer-bottom {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0 10px 10px;
-    color: var(--muted);
-    font-size: 10px;
-  }
-  .send-button {
-    width: 31px;
-    height: 31px;
-    border-radius: 8px;
-    display: grid;
-    place-items: center;
-    background: var(--accent);
-    color: white;
-  }
   .quote-preview {
     display: flex;
     align-items: flex-start;

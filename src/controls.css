@@ -100,6 +100,75 @@
     min-height: 112px;
     line-height: 1.75;
   }
+  .message-composer {
+    flex-shrink: 0;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+    background: var(--panel);
+  }
+  .message-composer:focus-within {
+    border-color: var(--accent);
+  }
+  .message-composer:has(textarea:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+  }
+  .message-composer-context {
+    border-bottom: 1px solid var(--line);
+    border-radius: var(--radius-control) var(--radius-control) 0 0;
+    overflow: hidden;
+  }
+  .message-composer-label {
+    display: block;
+    margin: 12px 16px 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .message-composer textarea,
+  .message-composer textarea:focus-visible {
+    display: block;
+    width: 100%;
+    min-height: 64px;
+    max-height: min(180px, 26dvh);
+    border: 0;
+    border-radius: 0;
+    padding: 8px 16px;
+    background: transparent;
+    color: var(--ink);
+    font-size: 16px;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    box-shadow: none;
+    scrollbar-width: thin;
+  }
+  .message-composer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px 12px 16px;
+  }
+  .message-composer-actions > span {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 8px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .message-composer-actions > span > span {
+    white-space: nowrap;
+  }
+  .message-composer-actions > button {
+    flex-shrink: 0;
+  }
+  .message-composer-error {
+    margin: 4px 16px;
+    color: var(--danger);
+    font-size: 13px;
+  }
   .primary,
   .outline-button,
   .quiet {
@@ -758,12 +827,6 @@
   .save-response {
     min-height: var(--control-height);
     font-size: 13px;
-  }
-  .chat-composer {
-    margin: var(--space-4);
-  }
-  .chat-composer textarea {
-    min-height: 88px;
   }
   .quote-preview .icon-button {
     width: 44px;

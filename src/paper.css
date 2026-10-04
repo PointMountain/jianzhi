@@ -452,6 +452,11 @@
   .learning-header .timer {
     margin-left: 0;
   }
+  .timer-label {
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
   .learning-header .completion-toggle {
     margin-left: 0;
   }
@@ -717,6 +722,7 @@
     border: 0;
     width: 100%;
     height: auto;
+    max-height: none;
     min-height: 0;
     background: var(--panel);
   }
@@ -754,11 +760,15 @@
     padding: 16px 0;
     scrollbar-width: thin;
     scrollbar-color: var(--line) transparent;
+    scroll-behavior: auto;
   }
   .chat-messages.is-empty {
     flex-shrink: 0;
     max-height: none;
     overflow: visible;
+  }
+  .chat-message:last-child {
+    margin-bottom: 0;
   }
   .tutor-welcome {
     padding: 0;
@@ -771,17 +781,14 @@
     flex-wrap: wrap;
     gap: 8px;
   }
-  .chat-composer {
-    margin: 0;
+  .new-chat-notice {
+    align-self: flex-end;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: var(--accent);
   }
-  .chat-composer textarea {
-    display: block;
-    min-height: 72px;
-    padding: 12px;
-    font-size: 14px;
-  }
-  .composer-bottom {
-    padding: 0 8px 8px 12px;
+  .message-composer textarea {
+    background: transparent;
   }
   .assistant-dialog .quote-preview {
     align-items: center;
@@ -1106,6 +1113,7 @@
       overflow: auto;
     }
     .assistant-dialog .chat-messages {
+      flex: none;
       max-height: none;
       overflow: visible;
     }

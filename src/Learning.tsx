@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -8,7 +8,6 @@ import {
   Clock,
   List,
   NotePencil,
-  PaperPlaneTilt,
   Pause,
   Play,
   Quotes,
@@ -29,6 +28,7 @@ import { DeleteNote } from './DeleteNote';
 import { lessonCompletion } from '../shared/completions';
 import { currentQuestion } from '../shared/guided';
 import { GuidedLearning } from './GuidedLearning';
+import { MessageComposer } from './MessageComposer';
 import {
   lessonStateKey,
   readLocal,
@@ -105,9 +105,24 @@ export function Learning({
     article = useRef<HTMLElement>(null);
   const chatPane = useRef<HTMLDivElement>(null);
   const chatAtEnd = useRef(true);
+  const chatScrollTop = useRef(0);
+  const chatWasVisible = useRef(false);
   const [newChat, setNewChat] = useState(false);
+  const [chatError, setChatError] = useState('');
   const key = keyFor(course.id, lesson.id);
   const messages = data.state.chats[key] ?? [];
+  const previousChatCount = useRef(messages.length);
+  const latestDraft = useRef({ message, quote });
+  latestDraft.current = { message, quote };
+  const chatVisible =
+    !rightCollapsed && !focusReading && sideTab === 'chat' && !(tab === 'recall' && !feedback && !assisted);
+  const attachChatPane = useCallback((pane: HTMLDivElement | null) => {
+    chatPane.current = pane;
+    if (!pane) return;
+    pane.scrollTop = chatAtEnd.current ? pane.scrollHeight : chatScrollTop.current;
+    if (chatAtEnd.current) setNewChat(false);
+    chatWasVisible.current = true;
+  }, []);
   const progress = data.state.progress[key];
   const completion = lessonCompletion(data.state, course.id, lesson.id);
   useEffect(() => {
@@ -199,16 +214,31 @@ export function Learning({
       feedbackAbort.current?.abort();
     };
   }, []);
-  useEffect(() => {
-    if (messages.length && chatAtEnd.current && !rightCollapsed && chatPane.current)
-      chatPane.current.scrollTop = chatPane.current.scrollHeight;
-    else if (messages.length) setNewChat(true);
-  }, [messages.length, busy, rightCollapsed]);
+  useLayoutEffect(() => {
+    const addedReply = messages.slice(previousChatCount.current).some((item) => item.role === 'assistant');
+    previousChatCount.current = messages.length;
+    if (!chatVisible) {
+      if (addedReply) setNewChat(true);
+      chatWasVisible.current = false;
+      return;
+    }
+    const pane = chatPane.current;
+    if (!pane) return;
+    if (chatAtEnd.current) {
+      pane.scrollTop = pane.scrollHeight;
+      setNewChat(false);
+    } else {
+      if (!chatWasVisible.current) pane.scrollTop = chatScrollTop.current;
+      if (addedReply) setNewChat(true);
+    }
+    chatWasVisible.current = true;
+  }, [messages.length, busy, chatVisible]);
   async function ask(text = message) {
     if (!text.trim() || busy || checking) return;
     if (tab === 'recall' && !feedback) setAssisted(true);
     setBusy(true);
     setError('');
+    setChatError('');
     setSideTab('chat');
     setRightCollapsed(false);
     abort.current = new AbortController();
@@ -225,10 +255,10 @@ export function Learning({
       );
       if (!alive.current) return;
       accept(result);
-      setMessage('');
-      setQuote('');
+      if (text === message && latestDraft.current.message === message) setMessage('');
+      if (latestDraft.current.quote === quote) setQuote('');
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') setError((e as Error).message);
+      if ((e as Error).name !== 'AbortError') setChatError((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -342,10 +372,10 @@ export function Learning({
     <div className="quote-preview" aria-label="已引用原文">
       <Quotes size={15} />
       <span>{quote}</span>
-      <button className="quiet" onClick={() => setQuoteOpen(true)}>
+      <button type="button" className="quiet" onClick={() => setQuoteOpen(true)}>
         查看引用
       </button>
-      <button aria-label="移除引用" className="icon-button" onClick={() => setQuote('')}>
+      <button type="button" aria-label="移除引用" className="icon-button" onClick={() => setQuote('')}>
         <X size={15} />
       </button>
     </div>
@@ -433,8 +463,12 @@ export function Learning({
         >
           <Check size={16} /> {completion ? '本节已学完' : '学完本节'}
         </button>
-        <div className="timer">
-          <Clock size={16} />
+        <div
+          className="timer"
+          title="本小节页面可见且未暂停的停留时间；提交回忆自评时保存，刷新或换小节会归零。"
+        >
+          <Clock size={16} aria-hidden="true" />
+          <small className="timer-label">本次停留</small>
           <span>
             {String(Math.floor(seconds / 60)).padStart(2, '0')}:{String(seconds % 60).padStart(2, '0')}
           </span>
@@ -845,22 +879,25 @@ export function Learning({
               <>
                 {newChat && (
                   <button
-                    className="quiet"
+                    className="quiet new-chat-notice"
                     onClick={() => {
                       if (chatPane.current) chatPane.current.scrollTop = chatPane.current.scrollHeight;
                       chatAtEnd.current = true;
                       setNewChat(false);
                     }}
                   >
-                    有新内容 · 回到最新
+                    有新回复 · 回到最新
                   </button>
                 )}
                 <div
                   className={`chat-messages ${messages.length || busy ? '' : 'is-empty'}`}
-                  ref={chatPane}
+                  ref={attachChatPane}
                   onScroll={(e) => {
                     const p = e.currentTarget;
+                    if (!p.clientHeight) return;
+                    chatScrollTop.current = p.scrollTop;
                     chatAtEnd.current = p.scrollHeight - p.scrollTop - p.clientHeight < 64;
+                    if (chatAtEnd.current) setNewChat(false);
                   }}
                 >
                   {!messages.length && (
@@ -913,42 +950,17 @@ export function Learning({
                     </div>
                   )}
                 </div>
-                <div className="chat-composer">
-                  {quotePreview}
-                  <label className="sr-only" htmlFor="chat-question">
-                    共学问题
-                  </label>
-                  <textarea
-                    id="chat-question"
-                    rows={2}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="哪里卡住了？说说你的想法…"
-                    onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                        e.preventDefault();
-                        void ask();
-                      }
-                    }}
-                  />
-                  <div className="composer-bottom">
-                    <span>⌘ / Ctrl + Enter</span>
-                    {busy ? (
-                      <button className="quiet" onClick={() => abort.current?.abort()}>
-                        停止
-                      </button>
-                    ) : (
-                      <button
-                        aria-label="发送问题"
-                        className="send-button"
-                        disabled={!message.trim() || checking}
-                        onClick={() => void ask()}
-                      >
-                        <PaperPlaneTilt size={19} />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                <MessageComposer
+                  id="chat-question"
+                  value={message}
+                  onChange={setMessage}
+                  onSend={() => void ask()}
+                  onStop={() => abort.current?.abort()}
+                  busy={busy}
+                  disabled={checking}
+                  error={chatError}
+                  context={quotePreview}
+                />
               </>
             ) : (
               <div className="inline-notes">
